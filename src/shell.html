@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Retro Hole: voxel hole game</title>
+<meta name="theme-color" content="#1a1433">
+<link rel="icon" type="image/png" href="data:image/png;base64,__FAVICON__">
+<style>
+@font-face{font-family:'Press Start 2P';src:url(data:font/woff2;base64,__PS2P__) format('woff2');font-display:block}
+@font-face{font-family:'VT323';src:url(data:font/woff2;base64,__VT323__) format('woff2');font-display:block}
+/* Retro Set's palette and pixel fonts, so the games look like a family */
+:root{--night:#1a1433;--plum:#3a2452;--plum2:#4e3270;--lamp:#ffc56b;--chalk:#6cb8ff;--rose:#ff6f8f;--paper:#f7ead2;--ink:#0d0a1c;--mint:#7dffb0}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--night);color:var(--paper);font-family:'VT323',ui-monospace,monospace;font-size:22px;line-height:1.15;-webkit-user-select:none;user-select:none;touch-action:none;overscroll-behavior:none}
+[hidden]{display:none!important}
+#view{position:fixed;left:0;top:0;display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+.panel{background:rgba(22,17,44,.92);border:3px solid var(--lamp);box-shadow:6px 6px 0 var(--ink)}
+.btn{font-family:'Press Start 2P',monospace;font-size:10px;line-height:1.35;color:var(--paper);background:var(--plum);border:3px solid var(--ink);border-radius:0;box-shadow:inset -3px -3px 0 rgba(0,0,0,.35),inset 3px 3px 0 rgba(255,255,255,.14);padding:9px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--plum2)}
+.btn:active{transform:translate(2px,2px)}
+.btn[aria-pressed="true"]{background:var(--lamp);color:var(--ink)}
+.btn.main{background:var(--rose);color:var(--ink);font-size:12px;padding:12px 18px}
+button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
+
+/* in a game */
+#hud{position:fixed;inset:0;pointer-events:none}
+#hud>*{position:absolute}
+#lvl{left:max(14px,env(safe-area-inset-left));top:max(12px,env(safe-area-inset-top));width:min(300px,52vw);padding:8px 12px 10px}
+#lvTop{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+#lvNum{font-family:'Press Start 2P',monospace;font-size:14px;color:var(--lamp);text-shadow:2px 2px 0 var(--ink)}
+#lvSize{font-size:20px;opacity:.9;white-space:nowrap}
+#xpBar{height:12px;margin-top:6px;background:var(--ink);border:3px solid var(--ink);outline:2px solid var(--plum2)}
+#xpFill{display:block;height:100%;width:0;background:var(--mint)}
+#lvSub{display:flex;justify-content:space-between;margin-top:5px;font-size:19px;opacity:.85}
+#top{right:max(14px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+#top .btn{pointer-events:auto}
+#where{padding:6px 10px;font-size:20px;text-align:right;line-height:1.1}
+#where b{font-weight:400;color:var(--lamp)}
+#toast{left:50%;top:22%;transform:translateX(-50%);font-family:'Press Start 2P',monospace;font-size:16px;color:var(--lamp);text-shadow:3px 3px 0 var(--ink);white-space:nowrap;opacity:0;transition:opacity .25s;text-align:center}
+#toast.on{opacity:1}
+#hint{left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:min(620px,92vw);padding:7px 14px;font-size:21px;text-align:center;opacity:0;transition:opacity .4s}
+#hint.on{opacity:1}
+#stick{position:fixed;width:120px;height:120px;margin:-60px 0 0 -60px;pointer-events:none;border:3px solid rgba(255,255,255,.35);border-radius:50%}
+#stick i{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;background:rgba(255,197,107,.7);border:3px solid var(--ink)}
+
+/* the title screen, the pause menu and the settings */
+.overlay{position:fixed;inset:0;display:grid;place-items:center;padding:16px;overflow:auto}
+#title{background:linear-gradient(180deg,rgba(13,10,28,.55),rgba(13,10,28,.15) 45%,rgba(13,10,28,.7))}
+#titleBox{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+#brand{margin:0;font-family:'Press Start 2P',monospace;font-weight:400;font-size:clamp(24px,6vw,48px);line-height:1;color:var(--lamp);text-shadow:3px 3px 0 var(--rose),6px 6px 0 var(--ink)}
+#tag{font-size:24px;max-width:30ch}
+#titleBtns{display:flex;flex-direction:column;gap:10px;min-width:260px}
+#how{font-size:20px;opacity:.85;max-width:44ch}
+#ver{position:fixed;left:0;right:0;bottom:6px;text-align:center;font-size:17px;opacity:.55}
+#pause{background:rgba(13,10,28,.55)}
+.ovPanel{width:min(420px,94vw);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.ovPanel h2{margin:0 0 4px;font-family:'Press Start 2P',monospace;font-weight:400;font-size:13px;color:var(--lamp)}
+.ovPanel p{margin:0;font-size:21px}
+.row{display:grid;grid-template-columns:130px 1fr;gap:6px 12px;align-items:center}
+.lbl{color:var(--lamp);font-size:21px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg .btn{font-size:9px;padding:7px 9px}
+.note{font-size:18px;opacity:.75}
+@media (max-width:560px){.row{grid-template-columns:1fr}}
+@media (max-height:420px){#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud" hidden>
+  <div id="lvl" class="panel">
+    <div id="lvTop"><span id="lvNum">Level 1</span><span id="lvSize">1.0 m</span></div>
+    <div id="xpBar"><i id="xpFill"></i></div>
+    <div id="lvSub"><span id="lvEaten">Eaten 0</span><span id="lvNext"></span></div>
+  </div>
+  <div id="top">
+    <button id="bMenu" class="btn" type="button">Menu</button>
+    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span></div>
+  </div>
+  <div id="toast"></div>
+  <div id="hint" class="panel"></div>
+</div>
+<div id="stick" hidden><i></i></div>
+
+<div id="title" class="overlay">
+  <div id="titleBox">
+    <h1 id="brand">RETRO HOLE</h1>
+    <div id="tag">Swallow the world. The further out, the bigger it gets.</div>
+    <div id="titleBtns">
+      <button id="bPlay" class="btn main" type="button">Play</button>
+      <button id="bNew" class="btn" type="button" hidden>New Game</button>
+      <button id="bSet" class="btn" type="button">Settings</button>
+    </div>
+    <div id="how">Steer with the mouse, WASD or the arrow keys, or touch and drag. Eat anything smaller than your hole.</div>
+  </div>
+</div>
+
+<div id="pause" class="overlay" hidden>
+  <div class="ovPanel panel">
+    <h2>Menu</h2>
+    <button id="bResume" class="btn main" type="button">Resume</button>
+    <button id="bHome" class="btn" type="button">Return to Start</button>
+    <button id="bSet2" class="btn" type="button">Settings</button>
+    <button id="bQuit" class="btn" type="button">Quit to Title</button>
+  </div>
+</div>
+
+<div id="settings" class="overlay" hidden>
+  <div class="ovPanel panel">
+    <h2>Settings</h2>
+    <div id="setRows"></div>
+    <div class="note">Fewer pixels and fewer colours suit slower devices.</div>
+    <button id="bSetClose" class="btn main" type="button">Close</button>
+  </div>
+</div>
+<div id="ver"></div>
+
+<script type="module">
+__BUNDLE__
+</script>
+</body>
+</html>
