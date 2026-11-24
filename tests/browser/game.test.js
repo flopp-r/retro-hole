@@ -30,6 +30,17 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
   ok(a1.every(o => o.inside), 'and they stay inside their cells');
   ok(await p.evaluate(() => __rh.poolSlots() === __rh.standing() + __rh.FALL.length), 'moving animals keep the drawn copies in step');
 
+  // a house too big to eat dissolves while the hole is under it, and comes back when the hole leaves
+  const house = await p.evaluate(() => { for (const c of __rh.CELLS.values()) for (const o of c.objs) if (/^(house|cottage)/.test(__rh.W.TYPES[o.ty].id) && !o.state) { window.__house = o; __rh.teleport(o.x, o.z); return { r: o.r, hr: __rh.H.r }; } return null; });
+  ok(!!house && house.r > house.hr, 'there is a house bigger than the hole');
+  await frames(p, 30);
+  ok(await p.evaluate(() => window.__house.fd > 0.7 && __rh.fading >= 1), 'a house over the hole dissolves');
+  await p.evaluate(() => __rh.teleport(window.__house.x + 6, window.__house.z + 6)); await frames(p, 40);
+  ok(await p.evaluate(() => window.__house.fd === 0 && !window.__house.fading), 'and comes back when the hole has gone');
+  await p.evaluate(() => __rh.teleport(0, 0)); await frames(p, 3);
+  // things the hole can eat never dissolve
+  ok(await p.evaluate(() => { for (const c of __rh.CELLS.values()) for (const o of c.objs) if (__rh.W.canEat(o.r, __rh.H.r) && o.fd) return false; return true; }), 'things small enough to eat are never faded');
+
   // steering with the keyboard: right on the screen is +x and -z
   const pos = () => p.evaluate(() => ({ x: __rh.H.x, z: __rh.H.z }));
   const p0 = await pos();
@@ -45,6 +56,22 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
   // the mouse: a pointer to the right of the middle steers right
   await p.mouse.move(470, 150); await frames(p, 25); const p4 = await pos(); await p.mouse.move(240, 150); await frames(p, 3);
   ok(p4.x - p3.x > 0.3, 'a mouse pointer to the right steers right');
+  // the mouse can be turned off with M or in Settings, and the keys still steer
+  await p.keyboard.press('m');
+  ok(await p.evaluate(() => __rh.S.mouse === false && JSON.parse(localStorage.getItem('retroHole.settings')).mouse === false) && (await p.textContent('#toast')) === 'Mouse steering off', 'M turns mouse steering off, says so and saves it');
+  await p.mouse.move(470, 150); await frames(p, 3); const o0 = await pos(); await frames(p, 25); const o1 = await pos();
+  ok(Math.hypot(o1.x - o0.x, o1.z - o0.z) < 0.05, 'with mouse steering off the pointer does not steer');
+  await p.keyboard.down('d'); await frames(p, 20); await p.keyboard.up('d');
+  ok((await pos()).x - o1.x > 0.3, 'but the keys still do');
+  await p.keyboard.press('m'); await p.mouse.move(470, 150); await frames(p, 25);
+  ok(await p.evaluate(() => __rh.S.mouse === true) && (await pos()).x - o1.x > 0.5, 'M turns it back on');
+  await p.mouse.move(240, 150); await frames(p, 5);
+  await p.keyboard.press('Escape'); await p.click('#bSet2');
+  ok(await p.isVisible('#settings button[data-key="mouse"][data-v="false"]'), 'Settings has a Mouse Steering row');
+  await p.click('#settings button[data-key="mouse"][data-v="false"]'); ok(await p.evaluate(() => __rh.S.mouse === false), 'Off in Settings turns it off');
+  await p.click('#settings button[data-key="mouse"][data-v="true"]'); await p.click('#bSetClose'); await p.keyboard.press('Escape'); await frames(p, 3);
+  ok(await p.evaluate(() => __rh.S.mouse === true && __rh.state === 'play'), 'and On turns it on');
+  await p.mouse.move(240, 150); await frames(p, 20);
   await p.mouse.move(440, 28); await frames(p, 3); const m0 = await pos(); await frames(p, 20); const m1 = await pos();   // over the Menu button
   ok(Math.hypot(m1.x - m0.x, m1.z - m0.z) < 0.05, 'a pointer over a button does not steer');
   await p.mouse.move(240, 150); await frames(p, 30);
@@ -76,7 +103,7 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
 
   // levelling up: eat with a hole just short of level 2
   await p.evaluate(() => { __rh.teleport(0, 0); __rh.setXp(__rh.W.CUM[2] - 0.001); });
-  const lv = await p.evaluate(() => { const n = __rh.nearestEdible(); __rh.teleport(n.x, n.z); return __rh.H.level; });
+  const lv = await p.evaluate(() => { const n = __rh.nearestEdible(/^flower/); __rh.teleport(n.x, n.z); return __rh.H.level; });
   await frames(p, 6);
   ok(lv === 1 && await p.evaluate(() => __rh.H.level) === 2 && (await p.textContent('#lvNum')).trim() === 'Level 2', 'one more thing takes the hole to level 2');
   ok(await p.evaluate(() => document.querySelector('#toast').classList.contains('on') && document.querySelector('#toast').textContent === 'Level 2'), 'a banner says Level 2');

@@ -6,9 +6,10 @@ Part of the same family as Retro Rack (pool) and Retro Set (chess): the same pix
 
 ## Playing
 
-- **Steer:** move the mouse (the hole follows the pointer), or WASD, or the arrow keys. On a phone or tablet, touch and drag.
-- **Eat:** anything smaller than your hole falls in. Things bigger than you stay where they are, and you pass under them. Animals wander about, so you may have to chase them.
+- **Steer:** move the mouse (the hole follows the pointer), or WASD, or the arrow keys. On a phone or tablet, touch and drag. Press **M** (or use Settings) to turn mouse steering off, so only the keys steer.
+- **Eat:** anything smaller than your hole falls in. Things bigger than you stay where they are, and you pass under them; while you are under one, or it is in the way of the camera, it fades out so you can see what is round you. Animals wander about, so you may have to chase them.
 - **Grow:** each thing eaten fills the bar. Level up and the hole gets wider.
+- **Places:** villages have houses with gardens, farms, fields and ponds; forests have woods, clearings and groves; cities have streets with traffic, pavements and rows of buildings.
 - **Go further out** for bigger things. Close to the start everything is small. The area name and your distance from the start are top right.
 - **Lost?** Open the menu (Esc, or the Menu button) and choose Return to Start. It keeps your size.
 - **Settings** (title screen or menu): pixel size, colours, dithering, outlines and volume. Fewer pixels and fewer colours suit slower devices.

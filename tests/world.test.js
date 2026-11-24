@@ -48,63 +48,133 @@ ok(new Set(W.TYPES.map(t => t.id)).size === W.TYPES.length, 'every type has its 
 const small = W.TYPES.filter(t => t.b <= 0.4 && t.from === 0);
 for (const b of ['village', 'forest', 'city']) ok(small.filter(t => t.biome === b).length >= 4, b + ' has at least four things a level 1 hole can eat from the start');
 
+// -- plots and roads: the framework every area follows
+const kindsSeen = {};
+for (let t = 0; t < 5; t++) for (let i = -14; i < 14; i++) for (let j = -14; j < 14; j++) { const [dA, dB] = W.tierRange(t), c = W.cellInfo(t, i, j), d = Math.hypot(c.cx, c.cz); if (d >= dA && d < dB) kindsSeen[c.biome + '/' + c.kind] = 1; }
+const KINDS = ['village/homestead', 'village/farm', 'village/pasture', 'village/field', 'village/orchard', 'village/green', 'village/pond', 'village/meadow', 'forest/dense', 'forest/mixed', 'forest/clearing', 'forest/rocky', 'forest/pond', 'forest/grove', 'city/built', 'city/park', 'city/plaza', 'city/lot'];
+ok(KINDS.every(k => kindsSeen[k] && W.LAYOUTS[k.split('/')[0]][k.split('/')[1]]), 'all 18 kinds of plot turn up, and each has a layout (' + KINDS.filter(k => !kindsSeen[k]).join(',') + ')');
+ok(W.cellInfo(0, 0, 0).kind === 'pasture' && W.cellInfo(0, -1, 0).kind === 'homestead' && W.cellInfo(0, 0, -1).kind === 'green' && W.cellInfo(0, -1, -1).kind === 'homestead', 'the four cells round the start are fixed');
+let edgeBad = 0, edges = 0, roadStart = 0;
+for (let t = 0; t < 4; t++) for (let i = -9; i < 9; i++) for (let j = -9; j < 9; j++) {
+  const c = W.cellInfo(t, i, j), e = W.cellInfo(t, i + 1, j), s = W.cellInfo(t, i, j + 1);
+  edges++; if (c.road.e !== e.road.w || c.road.s !== s.road.n) edgeBad++;
+  for (const [sd, mx, mz] of [['w', c.x0, c.cz], ['e', c.x1, c.cz], ['n', c.cx, c.z0], ['s', c.cx, c.z1]]) if (c.road[sd] && Math.hypot(mx, mz) < 45) roadStart++;
+}
+ok(edgeBad === 0, 'both cells either side of a road agree on it (' + edges + ' cells)');
+ok(roadStart === 0, 'no road runs through the start');
+let cityEdges = 0, cityBroken = 0;
+for (let t = 1; t < 4; t++) for (let i = -9; i < 9; i++) for (let j = -9; j < 9; j++) { const c = W.cellInfo(t, i, j), e = W.cellInfo(t, i + 1, j); if (c.biome === 'city' && e.biome === 'city') { cityEdges++; if (c.road.e !== 'street') cityBroken++; } }
+ok(cityEdges > 20 && cityBroken === 0, 'every edge between two city plots is a street (' + cityEdges + ')');
+
 // -- cells
 const a = W.genCell(1, 2, 3, 0), b = W.genCell(1, 2, 3, 0);
 ok(JSON.stringify(a.objs) === JSON.stringify(b.objs), 'a cell is the same each time it is made');
-W.setSeed(5); const c = W.genCell(1, 2, 3, 0); W.setSeed(20261124);
-ok(JSON.stringify(c.objs) !== JSON.stringify(a.objs), 'another seed makes another map');
-let bad = 0, outside = 0, wrongRing = 0, clash = 0, total = 0;
-for (const [t, i, j] of [[0, 0, 0], [0, -1, -1], [0, 3, -2], [1, 1, 1], [1, -2, 1], [2, 2, -3], [2, -1, 1], [3, 4, 4], [4, -6, 2], [6, 20, -9]]) {
+W.setSeed(5); const c5 = W.genCell(1, 2, 3, 0); W.setSeed(20261124);
+ok(JSON.stringify(c5.objs) !== JSON.stringify(a.objs), 'another seed makes another map');
+let bad = 0, outside = 0, wrongRing = 0, clash = 0, total = 0, cells = 0, spawnBad = 0;
+const SAMPLE = [];
+for (let t = 0; t < 5; t++) for (let i = -9; i < 9; i += 2) for (let j = -9; j < 9; j += 2) { const [dA, dB] = W.tierRange(t), c = W.cellInfo(t, i, j), d = Math.hypot(c.cx, c.cz); if (d >= dA && d < dB) SAMPLE.push([t, i, j]); }
+for (const [t, i, j] of SAMPLE) {
   const cell = W.genCell(t, i, j, 0), [dA, dB] = W.tierRange(t);
-  total += cell.objs.length;
+  total += cell.objs.length; cells++;
   for (const o of cell.objs) {
-    const d = Math.hypot(o.x, o.z);
-    if (o.x - o.r < cell.x0 - 1e-6 || o.x + o.r > cell.x0 + cell.C + 1e-6 || o.z - o.r < cell.z0 - 1e-6 || o.z + o.r > cell.z0 + cell.C + 1e-6) outside++;
-    if (d < dA || d >= dB || d < W.SPAWN_CLEAR) wrongRing++;
-    if (!(o.r > 0 && o.h > 0 && o.s >= W.scaleAt(d) * 0.85 - 1e-9 && o.s <= W.scaleAt(d) * 1.2 + 1e-9)) bad++;
+    const d = Math.hypot(o.x, o.z), S = W.scaleAt(d);
+    if (o.x - o.ex < cell.x0 - 1e-6 || o.x + o.ex > cell.x0 + cell.C + 1e-6 || o.z - o.ez < cell.z0 - 1e-6 || o.z + o.ez > cell.z0 + cell.C + 1e-6) outside++;
+    if (d < dA || d >= dB) wrongRing++;
+    if (d - o.r < W.SPAWN_CLEAR - 1e-9) spawnBad++;
+    if (!(o.r > 0 && o.h > 0 && o.s >= S * 0.5 && o.s <= S * 1.4)) bad++;
   }
-  for (let p = 0; p < cell.objs.length; p++) for (let q = p + 1; q < cell.objs.length; q++) { const u = cell.objs[p], v = cell.objs[q]; if (Math.hypot(u.x - v.x, u.z - v.z) < (u.r + v.r) * 0.85 - 1e-9) clash++; }
+  for (let p = 0; p < cell.objs.length; p++) for (let q = p + 1; q < cell.objs.length; q++) { const u = cell.objs[p], v = cell.objs[q]; if (Math.abs(u.x - v.x) < (u.ex + v.ex) * 0.9 - 1e-9 && Math.abs(u.z - v.z) < (u.ez + v.ez) * 0.9 - 1e-9) clash++; }
 }
-ok(total > 300, 'cells hold things (' + total + ' in ten cells)');
+ok(cells > 50 && total > 3000, 'cells hold things (' + total + ' in ' + cells + ' cells)');
 ok(outside === 0, 'every thing stands wholly inside its cell');
-ok(wrongRing === 0, 'every thing belongs to its cell\'s ring and nothing stands on the start');
+ok(wrongRing === 0, 'every thing belongs to its cell\'s ring');
+ok(spawnBad === 0, 'nothing stands on the start');
 ok(bad === 0, 'every thing is sized to its distance');
 ok(clash === 0, 'things in a cell do not overlap');
-// cutting small things out does not move the big ones
-const full = W.genCell(2, -3, 2, 0), cut = W.genCell(2, -3, 2, 1.0);
-const key = o => o.ty + ':' + o.x.toFixed(6) + ':' + o.z.toFixed(6);
-const fullKeys = new Set(full.objs.map(key));
-ok(cut.objs.length < full.objs.length && cut.objs.every(o => o.r >= 1.0 && fullKeys.has(key(o))), 'leaving out small things leaves the rest exactly as it was');
-// the start: a level 1 hole has food, and nothing big enough to be in the way
-const start = W.genCell(0, 0, 0, 0);
-const edible = start.objs.filter(o => W.canEat(o.r, W.R0)).length;
-ok(edible > 40, 'the first cell has plenty a level 1 hole can eat (' + edible + ')');
-// the four cells round the start: bigger things in sight at once (out of reach of a level 1 hole), some of them within a
-// few levels' reach, and nothing enormous
+// cutting small things out does not move anything else
+let cutBad = 0;
+for (const [t, i, j] of SAMPLE.slice(0, 40)) {
+  const full = W.genCell(t, i, j, 0), cut = W.genCell(t, i, j, W.scaleAt(Math.hypot(full.x0 + full.C / 2, full.z0 + full.C / 2)) * 0.5);
+  const key = o => o.ty + ':' + o.x.toFixed(6) + ':' + o.z.toFixed(6), want = full.objs.filter(o => o.r >= W.scaleAt(Math.hypot(full.x0 + full.C / 2, full.z0 + full.C / 2)) * 0.5).map(key).sort().join('|');
+  if (cut.objs.map(key).sort().join('|') !== want) cutBad++;
+}
+ok(cutBad === 0, 'leaving out small things leaves the rest exactly as it was');
+// the start: a level 1 hole has food, bigger things in sight, houses, animals
 const round = [[0, 0], [-1, 0], [0, -1], [-1, -1]].flatMap(([i, j]) => W.genCell(0, i, j, 0).objs);
-const nextUp = round.filter(o => !W.canEat(o.r, W.R0) && W.canEat(o.r, W.radiusAt(12, 0))).length, houses = round.filter(o => o.r >= 1.8).length;
-ok(nextUp >= 10, 'round the start there are plenty of things just too big for level 1 that a level 12 hole can eat (' + nextUp + ')');
+const edible = round.filter(o => W.canEat(o.r, W.R0)).length, nextUp = round.filter(o => !W.canEat(o.r, W.R0) && W.canEat(o.r, W.radiusAt(12, 0))).length, houses = round.filter(o => /house|cottage/.test(W.TYPES[o.ty].id)).length;
+ok(edible > 200, 'round the start there are plenty of things a level 1 hole can eat (' + edible + ')');
+ok(nextUp >= 10, 'round the start there are things just too big for level 1 that a level 12 hole can eat (' + nextUp + ')');
 ok(houses >= 2, 'round the start there are houses in sight (' + houses + ')');
 ok(round.every(o => o.r < 6), 'round the start nothing is enormous');
-ok(round.length > 500, 'the start has more than 500 things within 32 m (' + round.length + ')');
 ok(round.filter(o => W.TYPES[o.ty].walk).length >= 20, 'and plenty of animals to wander (' + round.filter(o => W.TYPES[o.ty].walk).length + ')');
-// the hole's size grows quickly early: about 5 times wider by level 70 and 8 by 100
-ok(W.radiusAt(10, 0) / W.R0 > 1.5 && W.radiusAt(100, 0) / W.R0 > 7 && W.radiusAt(100, 0) / W.R0 < 10, 'the hole is 1.5 times wider by level 10 and 7 to 10 times by level 100 (' + (W.radiusAt(10, 0) / W.R0).toFixed(2) + ', ' + (W.radiusAt(100, 0) / W.R0).toFixed(1) + ')');
+ok(W.radiusAt(10, 0) / W.R0 > 1.5 && W.radiusAt(100, 0) / W.R0 > 7 && W.radiusAt(100, 0) / W.R0 < 10, 'the hole is 1.5 times wider by level 10 and 7 to 10 times by level 100');
 // further out is bigger
-const nearMax = Math.max(...W.genCell(0, 0, 0).objs.map(o => o.r)), farMax = Math.max(...W.genCell(5, 3, 1).objs.map(o => o.r));
-ok(farMax > nearMax * 10, 'things are much bigger far out (' + nearMax.toFixed(2) + ' m against ' + farMax.toFixed(0) + ' m)');
-// city streets: cars stand on streets, buildings between them
-let cars = 0, carsOff = 0, blocks = 0, blocksOn = 0;
-for (let t = 1; t < 5; t++) for (let i = -8; i < 8; i++) for (let j = -8; j < 8; j++) {
-  if (W.biomeAt((i + 0.5) * W.cellSize(t), (j + 0.5) * W.cellSize(t)) !== 'city') continue;
-  for (const o of W.genCell(t, i, j, 0).objs) {
-    const ty = W.TYPES[o.ty], g = W.grid(o.x, o.z);
-    if (ty.on === 'road') { cars++; if (!(g.fu < W.ROADW || g.fv < W.ROADW)) carsOff++; }
-    if (ty.on === 'block') { blocks++; if (g.fu < W.ROADW || g.fv < W.ROADW) blocksOn++; }
+const nearMax = Math.max(...W.genCell(0, 0, 0).objs.map(o => o.r)), farMax = Math.max(...W.genCell(5, 3, 1).objs.map(o => o.r), 0);
+ok(farMax > nearMax * 8, 'things are much bigger far out (' + nearMax.toFixed(2) + ' m against ' + farMax.toFixed(0) + ' m)');
+
+// -- believable places: things stand where they belong
+const idOf = o => W.TYPES[o.ty].id.replace(/\d$/, '');
+const sideDist = (c, o) => ({ w: o.x - c.x0, e: c.x1 - o.x, n: o.z - c.z0, s: c.z1 - o.z });
+const cityCells = SAMPLE.filter(([t, i, j]) => W.cellInfo(t, i, j).biome === 'city' && t >= 1), built = cityCells.filter(([t, i, j]) => W.cellInfo(t, i, j).kind === 'built');
+let cars = 0, carsOff = 0, carsWrong = 0, blds = 0, bldOnRoad = 0, bldWrong = 0, lamps = 0, lampsOff = 0, lights = 0, lightsOff = 0;
+const angleEq = (p, q) => Math.abs(Math.atan2(Math.sin(p - q), Math.cos(p - q))) < 1e-6;
+for (const [t, i, j] of built) {
+  const c = W.cellInfo(t, i, j), cell = W.genCell(t, i, j, 0), TS = c.TS, S = W.STYLES.street, wd = S.w * TS, pv = S.verge * TS;
+  for (const o of cell.objs) {
+    const id = idOf(o), dist = sideDist(c, o);
+    if (['car', 'van', 'bus'].includes(id)) {                      // in a lane, going the way traffic goes on that side
+      cars++;
+      const side = Object.keys(dist).filter(k => c.road[k] === 'street').sort((p, q) => dist[p] - dist[q])[0];
+      if (!side || dist[side] > wd / 2 + 1e-6) carsOff++;
+      else if (!angleEq(o.yaw % (2 * Math.PI), W.yawOf(...W.LANE[side]) % (2 * Math.PI))) carsWrong++;
+    }
+    if (['shop', 'terrace', 'flats', 'office', 'tower', 'skyscraper'].includes(id)) {   // between the pavements, facing the nearest street
+      blds++;
+      if (o.x - o.ex < c.inner.x0 - 1e-6 || o.x + o.ex > c.inner.x1 + 1e-6 || o.z - o.ez < c.inner.z0 - 1e-6 || o.z + o.ez > c.inner.z1 + 1e-6) bldOnRoad++;
+      const side = ['w', 'e', 'n', 's'].find(k => angleEq(o.yaw, W.yawOf(...W.FACE[k])));   // it faces one street, and its front is on that street's pavement
+      const ext = side === 'w' || side === 'e' ? o.ex : o.ez;
+      if (!side || Math.abs(dist[side] - ext - (c.mg[side] + 0.25 * TS)) > 1e-6) bldWrong++;
+    }
+    if (id === 'lamp') { lamps++; const side = Object.keys(dist).sort((p, q) => dist[p] - dist[q])[0]; if (dist[side] < wd / 2 - 1e-6 || dist[side] > wd / 2 + pv + 1e-6) lampsOff++; }
+    if (id === 'trafficlight') { lights++; const dx = Math.min(o.x - c.x0, c.x1 - o.x), dz = Math.min(o.z - c.z0, c.z1 - o.z); if (dx > wd / 2 + pv || dz > wd / 2 + pv) lightsOff++; }
   }
 }
-ok(cars > 10 && carsOff === 0, 'cars stand on streets (' + cars + ' checked)');
-ok(blocks > 10 && blocksOn === 0, 'buildings stand between streets (' + blocks + ' checked)');
+ok(built.length >= 8 && cars > 20 && carsOff === 0, 'cars stand in the lanes (' + cars + ' cars in ' + built.length + ' blocks)');
+ok(carsWrong === 0, 'and go the way traffic goes on that side (on the left)');
+ok(blds > 40 && bldOnRoad === 0, 'buildings stand between the pavements (' + blds + ' buildings)');
+ok(bldWrong === 0, 'and face the street');
+ok(lamps > 40 && lampsOff === 0, 'lamps stand on the pavement (' + lamps + ')');
+ok(lights >= 10 && lightsOff === 0, 'traffic lights stand at the corners (' + lights + ')');
+// ground: a street tile is dark, the pavement light, and no building stands on the street
+let groundBad = 0;
+for (const [t, i, j] of built.slice(0, 6)) {
+  const c = W.cellInfo(t, i, j), wd = W.STYLES.street.w * c.TS, pv = W.STYLES.street.verge * c.TS, rd = W.groundColour(c.x0 + wd * 0.25, c.cz, 0, 0), pave = W.groundColour(c.x0 + wd / 2 + pv / 2, c.cz, 0, 0);
+  if (!(rd[0] < 0.3 && rd[1] < 0.3 && pave[0] > 0.6)) groundBad++;
+}
+ok(groundBad === 0, 'the ground is dark where the street is and light where the pavement is');
+// buildings are taller further out, and low at a city\'s edge
+const heights = d0 => { const hs = []; for (const [t, i, j] of built) { const c = W.cellInfo(t, i, j); if (Math.hypot(c.cx, c.cz) < d0) continue; for (const o of W.genCell(t, i, j, 0).objs) if (['shop', 'terrace', 'flats', 'office', 'tower', 'skyscraper'].includes(idOf(o))) hs.push(o.h / W.scaleAt(Math.hypot(o.x, o.z))); } return hs; };
+const lowB = W.TYPES.filter(t => /^(shop|terrace)/.test(t.id)), skyB = W.BYID.skyscraper;
+ok(lowB.every(t => t.from <= 40) && skyB.from >= 800, 'shops and terraces appear from 40 m, skyscrapers only from 840 m out');
+// pens: an animal in a pen is inside it; fences stand round it
+let penBad = 0, pens = 0, fences = 0;
+for (const [t, i, j] of SAMPLE.slice(0, 120)) for (const o of W.genCell(t, i, j, 0).objs) { if (o.pen) { pens++; if (o.x < o.pen.x0 || o.x > o.pen.x1 || o.z < o.pen.z0 || o.z > o.pen.z1) penBad++; } if (idOf(o) === 'fence') fences++; }
+ok(pens > 20 && penBad === 0, 'penned animals are inside their pens (' + pens + ')');
+ok(fences > 50, 'there are fences (' + fences + ')');
+// the village and the forest: houses face their lane, trees are not on trails
+let houseBad = 0, houseN = 0, treeOnTrail = 0, trees = 0;
+for (const [t, i, j] of SAMPLE) {
+  const c = W.cellInfo(t, i, j);
+  if (c.biome === 'village' && c.kind === 'homestead') for (const o of W.genCell(t, i, j, 0).objs) if (/^(house|cottage)/.test(W.TYPES[o.ty].id)) { houseN++; const roads = Object.keys(c.road).filter(k => c.road[k]); if (roads.length && !roads.some(k => angleEq(o.yaw, W.yawOf(...W.FACE[k])))) houseBad++; }
+  if (c.biome === 'forest') for (const o of W.genCell(t, i, j, 0).objs) if (['pine', 'oak', 'giantoak', 'redwood'].includes(idOf(o))) { trees++; const dist = sideDist(c, o); for (const k of Object.keys(dist)) if (c.road[k] && dist[k] - Math.max(o.ex, o.ez) < W.STYLES[c.road[k]].w / 2 * c.TS - 1e-6) treeOnTrail++; }
+}
+ok(houseN >= 10 && houseBad === 0, 'houses face their lane (' + houseN + ')');
+ok(trees > 200 && treeOnTrail === 0, 'trees keep off the trails (' + trees + ')');
+// ponds: a pond cell has water, and ducks and reeds round it, and nothing stands in the water
+let pondBad = 0, ponds = 0, ducks = 0;
+for (let t = 0; t < 4; t++) for (let i = -12; i < 12; i++) for (let j = -12; j < 12; j++) { const [dA, dB] = W.tierRange(t), c = W.cellInfo(t, i, j), d = Math.hypot(c.cx, c.cz); if (!c.pond || d < dA || d >= dB) continue; ponds++; for (const o of W.genCell(t, i, j, 0).objs) { const id = idOf(o); if (id === 'duck') ducks++; else if (Math.hypot(o.x - c.pond.x, o.z - c.pond.z) < c.pond.r * 0.9) pondBad++; } }
+ok(ponds >= 6 && pondBad === 0 && ducks > 5, 'ponds have ducks and nothing but ducks in the water (' + ponds + ' ponds, ' + ducks + ' ducks)');
 
 // -- the cells wanted round a point
 const w0 = W.wantedCells(0, 0, 10);

@@ -11,13 +11,15 @@ const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: r
 
 // ------------------------------------------------------------------ settings
 // pixel: game pixels are this many screen pixels across (0 is Max: one per real screen pixel); levels: shades per colour
-// channel (256 is full colour; fewer turns on the dithering); dither and outline: the filters; volume: 0 to 1
-const DEFAULTS = { pixel: 2, levels: 256, dither: true, outline: true, volume: 0.6 };
+// channel (256 is full colour; fewer turns on the dithering); dither and outline: the filters; volume: 0 to 1; mouse:
+// whether the hole follows the mouse pointer (the keyboard and touch always steer)
+const DEFAULTS = { pixel: 2, levels: 256, dither: true, outline: true, volume: 0.6, mouse: true };
 const S = { ...DEFAULTS };
 try { Object.assign(S, JSON.parse(localStorage.getItem('retroHole.settings') || '{}')); } catch (e) {}
 if (![0, 1, 2, 3, 4].includes(S.pixel)) S.pixel = DEFAULTS.pixel;
 if (![256, 32, 16, 8].includes(S.levels)) S.levels = DEFAULTS.levels;
 if (!(S.volume >= 0 && S.volume <= 1)) S.volume = DEFAULTS.volume;
+if (typeof S.mouse !== 'boolean') S.mouse = DEFAULTS.mouse;
 const saveS = () => { try { localStorage.setItem('retroHole.settings', JSON.stringify(S)); } catch (e) {} };
 
 // ------------------------------------------------------------------ renderer + post
@@ -99,32 +101,32 @@ function applyLook() {
 
 // ------------------------------------------------------------------ materials
 // Everything is lit flat (boxes), with colours as written. Two touches go into the shaders. The ground has the hole cut
-// out of it (a round gap with a darker rim). The upper parts of tall things lose a quarter of their pixels where they would hide
-// the hole, so the hole can be seen behind a tall building; things low enough to eat are never touched.
+// out of it (a round gap with a darker rim). A thing too big to eat that is over the hole, or in front of it, dissolves:
+// it loses pixels in the pattern of the post filter, by an amount (aFade, 0 to 1) the game sets for each thing, so the
+// hole and what is round it can always be seen and nothing blocks the camera.
 const UN = {
   uHoleW: { value: new THREE.Vector3() }, uHoleR: { value: 1 },
   uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uView: { value: new THREE.Vector3(0, 0, 1) },
-  uSinEl: { value: Math.sin(EL) },
 };
-const COMMON = 'varying vec3 vWP;\nuniform vec3 uHoleW; uniform float uHoleR; uniform vec3 uRight, uUp, uView; uniform float uSinEl;';
-function hook(mat, fragmentMain, tail) {
-  mat.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, UN);
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\nvWP = (instanceMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + COMMON)
-      .replace('void main() {', 'void main() {\n' + fragmentMain)
-      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + tail);
-  };
-}
 const groundMat = new THREE.MeshLambertMaterial();
-hook(groundMat, 'float dh = length(vWP.xz - uHoleW.xz); if (dh < uHoleR) discard;', 'if (dh < uHoleR * 1.12) gl_FragColor.rgb *= 0.55;');
+groundMat.onBeforeCompile = sh => {
+  Object.assign(sh.uniforms, UN);
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
+    .replace('#include <project_vertex>', '#include <project_vertex>\nvWP = (instanceMatrix * vec4(transformed, 1.0)).xyz;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nuniform vec3 uHoleW; uniform float uHoleR;')
+    .replace('void main() {', 'void main() {\nfloat dh = length(vWP.xz - uHoleW.xz); if (dh < uHoleR) discard;')
+    .replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (dh < uHoleR * 1.12) gl_FragColor.rgb *= 0.55;');
+};
 const thingMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-hook(thingMat, `vec3 dp = vWP - uHoleW;
-  if (dot(dp, uView) > 0.35 * uHoleR && vWP.y > 1.6 * uHoleR) {
-    float qx = dot(dp, uRight) / (1.3 * uHoleR), qy = dot(dp, uUp) / (1.3 * uHoleR * uSinEl + 0.001);
-    if (qx*qx + qy*qy < 1.0 && mod(floor(gl_FragCoord.x), 2.0) < 1.0 && mod(floor(gl_FragCoord.y), 2.0) < 1.0) discard;
-  }`, '');
+thingMat.onBeforeCompile = sh => {
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aFade; varying float vFade;')
+    .replace('#include <project_vertex>', '#include <project_vertex>\nvFade = aFade;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+    varying float vFade;
+    float b2(vec2 v){ return mod(2.0*v.x + 3.0*v.y, 4.0); }
+    float bayer4(vec2 p){ vec2 q = mod(floor(p), 4.0); return (4.0*b2(mod(q,2.0)) + b2(floor(q/2.0)) + 0.5)/16.0; }`)
+    .replace('void main() {', 'void main() {\n  if (vFade > 0.01 && bayer4(gl_FragCoord.xy) < vFade) discard;');
+};
 
 // ------------------------------------------------------------------ the hole
 // A round gap in the ground (see the ground's shader), a dark pit under it that things fall into, and a ring drawn over
@@ -174,9 +176,11 @@ function modelGeometry(m) {                                       // boxes (no u
   g.setIndex(idx);
   return g;
 }
+const FADE_CAP = 16384;                                           // most of one kind of thing at once (the budget is 14,000 things in all)
 class Pool {
   constructor(tyIndex) {
     this.ty = tyIndex; this.geo = modelGeometry(W.model(tyIndex)); this.cap = 0; this.n = 0; this.free = []; this.dirty = false; this.mesh = null;
+    this.fade = new Float32Array(FADE_CAP); this.fadeAttr = new THREE.InstancedBufferAttribute(this.fade, 1); this.geo.setAttribute('aFade', this.fadeAttr); this.fadeDirty = false;
     this.grow(256);
   }
   grow(cap) {
@@ -189,6 +193,7 @@ class Pool {
   alloc() {
     if (this.free.length) return this.free.pop();
     if (this.n === this.cap) this.grow(this.cap * 2);
+    if (this.n >= FADE_CAP) throw new Error('too many of one thing');
     this.mesh.count = ++this.n; return this.n - 1;
   }
   put(slot, x, y, z, q, s, br) {
@@ -197,8 +202,12 @@ class Pool {
     this.dirty = true;
   }
   hide(slot) { _m.makeScale(0, 0, 0).toArray(this.mesh.instanceMatrix.array, slot * 16); this.dirty = true; }
-  release(slot) { this.hide(slot); this.free.push(slot); }
-  flush() { if (!this.dirty) return; this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor.needsUpdate = true; this.dirty = false; }
+  release(slot) { this.hide(slot); this.setFade(slot, 0); this.free.push(slot); }
+  setFade(slot, v) { if (this.fade[slot] !== v) { this.fade[slot] = v; this.fadeDirty = true; } }
+  flush() {
+    if (this.fadeDirty) { this.fadeAttr.needsUpdate = true; this.fadeDirty = false; }
+    if (!this.dirty) return; this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor.needsUpdate = true; this.dirty = false;
+  }
 }
 const POOLS = [];
 const pool = ty => POOLS[ty] || (POOLS[ty] = new Pool(ty));
@@ -243,7 +252,7 @@ function mount(c) {
   objTotal += c.objs.length; CELLS.set(c.key, c);
 }
 function unmount(c) {
-  for (const o of c.objs) if (o.state < 2) { if (o.state === 1) dropFall(o); POOLS[o.ty].release(o.slot); o.state = 2; }
+  for (const o of c.objs) if (o.state < 2) { if (o.state === 1) dropFall(o); FADING.delete(o); o.fd = 0; o.fading = false; POOLS[o.ty].release(o.slot); o.state = 2; }
   objTotal -= c.objs.length; CELLS.delete(c.key);
 }
 function plan() {
@@ -306,8 +315,46 @@ function fallStep(dt) {
   }
 }
 
+// ------------------------------------------------------------------ nothing blocks the view
+// A thing too big to eat that stands over the hole, or between the camera and the hole (or just beside that line),
+// dissolves while it is in the way. The test is a straight line from the hole's middle towards the camera, through the
+// thing's box made a little bigger. A thing the hole can eat is never touched: it is small, and it is the point.
+const FADING = new Set();
+const FADE_TO = 0.8;
+function inTheWay(o, m) {
+  let t0 = 0, t1 = Infinity;
+  for (const [d, lo, hi] of [[TO_CAM.x, o.x - o.ex - m - H.x, o.x + o.ex + m - H.x], [TO_CAM.z, o.z - o.ez - m - H.z, o.z + o.ez + m - H.z], [TO_CAM.y, -m, o.h + m]]) {
+    const a = lo / d, b = hi / d;
+    t0 = Math.max(t0, Math.min(a, b)); t1 = Math.min(t1, Math.max(a, b));
+    if (t1 < t0) return false;
+  }
+  return true;
+}
+function fadeStep(dt) {
+  const m = 2.2 * H.r, reach = 1 / Math.tan(EL);
+  for (const c of CELLS.values()) {
+    if (c.maxH === undefined) { c.maxH = 0; for (const o of c.objs) if (o.h > c.maxH) c.maxH = o.h; }
+    const rr = (c.maxH + m) * reach + m + c.C / 2;
+    if (Math.abs(c.x0 + c.C / 2 - H.x) > rr || Math.abs(c.z0 + c.C / 2 - H.z) > rr) continue;
+    for (const o of c.objs) {
+      if (o.state || o.h < 0.8 * H.r || W.canEat(o.r, H.r)) continue;
+      if (inTheWay(o, m)) { o.ft = 1; if (!o.fading) { o.fading = true; FADING.add(o); } }
+    }
+  }
+  const k = Math.min(1, dt * 9);
+  for (const o of FADING) {
+    const goal = o.ft ? FADE_TO : 0;
+    o.ft = 0;
+    o.fd = (o.fd || 0) + (goal - (o.fd || 0)) * k;
+    if (Math.abs(o.fd - goal) < 0.02) o.fd = goal;
+    if (o.state === 2) { FADING.delete(o); continue; }
+    POOLS[o.ty].setFade(o.slot, reduceMotion ? goal : o.fd);
+    if (goal === 0 && o.fd === 0) { o.fading = false; FADING.delete(o); }
+  }
+}
+
 // ------------------------------------------------------------------ animals
-// Animals near the hole wander: they walk a little, stop, turn and go again, always inside their own cell. They are
+// Animals near the hole wander: they walk a little, stop, turn and go again, inside their own cell (or their pen). They are
 // moved here, a frame at a time, only while the hole is near; far away they stand where the map put them.
 const WALK = W.TYPES.map(t => t.walk);
 function wander(dt, now) {
@@ -323,7 +370,8 @@ function wander(dt, now) {
       if (!o.mv) { if (o.my !== 0) { o.my = 0; _q.setFromAxisAngle(Y, o.yaw); POOLS[o.ty].put(o.slot, o.x, 0, o.z, _q, o.s); } continue; }
       const sp = w * o.s * dt, dx = Math.cos(o.mh), dz = Math.sin(o.mh);
       let x = o.x + dx * sp, z = o.z + dz * sp;
-      const lo = c.x0 + o.r, hi = c.x0 + c.C - o.r, lz = c.z0 + o.r, hz = c.z0 + c.C - o.r;
+      const b = o.pen || { x0: c.x0, x1: c.x0 + c.C, z0: c.z0, z1: c.z0 + c.C };           // a penned animal stays in its pen
+      const lo = b.x0 + o.ex, hi = b.x1 - o.ex, lz = b.z0 + o.ez, hz = b.z1 - o.ez;
       if (x < lo || x > hi || z < lz || z > hz) { o.mh += Math.PI; x = Math.min(Math.max(x, lo), hi); z = Math.min(Math.max(z, lz), hz); }
       o.x = x; o.z = z; o.yaw = Math.atan2(-dx, -dz);
       o.my = 0.12 * o.r * Math.abs(Math.sin(now * 0.012 + o.mp)) + 1e-9;   // a little hop at each step
@@ -395,9 +443,11 @@ addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'escape') { e.preventDefault(); if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
   if (KEYMAP[k]) { IN.keys[KEYMAP[k]] = true; if (k.startsWith('arrow')) e.preventDefault(); }
+  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.key.toLowerCase()]; if (k) IN.keys[k] = false; });
 addEventListener('blur', () => { IN.keys = {}; IN.touch = null; $('#stick').hidden = true; });
+function setMouse(on) { S.mouse = !!on; if (!S.mouse) IN.mouse = false; saveS(); if (!$('#settings').hidden) renderSettings(); }
 function steer() {                                                // a push on the screen (right, up), each from -1 to 1
   const k = IN.keys;
   let ax = (k.r ? 1 : 0) - (k.l ? 1 : 0), ay = (k.u ? 1 : 0) - (k.d ? 1 : 0);
@@ -407,7 +457,7 @@ function steer() {                                                // a push on t
     $('#stick i').style.transform = `translate(${clamp(dx, -40, 40)}px,${clamp(-dy, -40, 40)}px)`;
     return l ? [dx / l * m, dy / l * m] : [0, 0];
   }
-  if (IN.mouse) {
+  if (IN.mouse && S.mouse) {
     const dx = IN.mx - innerWidth / 2, dy = -(IN.my - innerHeight / 2), l = Math.hypot(dx, dy), m = clamp((l / Math.min(innerWidth, innerHeight) - 0.06) / 0.22, 0, 1);
     return l ? [dx / l * m, dy / l * m] : [0, 0];
   }
@@ -489,7 +539,7 @@ function progressHints() {
   if (state !== 'play') return;
   if (H.eaten === 1) hint('first', 'Nicely done. Everything smaller than your hole falls in. Each thing eaten makes you bigger.');
   if (H.level >= 4) hint('far', 'Walking away from the start finds bigger things to eat. Things get bigger the further out you go.');
-  if (H.level >= 12) hint('area', 'Villages, forests and cities each have their own things. Look for the gaps in the streets in the city.');
+  if (H.level >= 12) hint('area', 'Villages, forests and cities each have their own things. Big things that block your view fade out while you are under them.');
 }
 function startGame(fresh) {
   ensureAudio();
@@ -523,6 +573,7 @@ let settingsFrom = null;
 function openSettings() { settingsFrom = state; $('#settings').hidden = false; renderSettings(); }
 function closeSettings() { $('#settings').hidden = true; }
 const OPTIONS = [
+  { key: 'mouse', label: 'Mouse Steering', vals: [[true, 'On'], [false, 'Off']] },
   { key: 'pixel', label: 'Pixel Size', vals: [[1, '1x'], [2, '2x'], [3, '3x'], [4, '4x'], [0, 'Max']] },
   { key: 'levels', label: 'Colours', vals: [[256, 'Full'], [32, '32'], [16, '16'], [8, '8']] },
   { key: 'dither', label: 'Dithering', vals: [[true, 'On'], [false, 'Off']] },
@@ -538,7 +589,7 @@ function renderSettings() {
     for (const [v, t] of o.vals) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = t; b.dataset.key = o.key; b.dataset.v = String(v);
       b.setAttribute('aria-pressed', String(S[o.key] === v));
-      b.onclick = () => { S[o.key] = v; saveS(); if (o.key === 'pixel') resize(); applyLook(); renderSettings(); sfx('ui'); };
+      b.onclick = () => { S[o.key] = v; if (o.key === 'mouse') IN.mouse = false; saveS(); if (o.key === 'pixel') resize(); applyLook(); renderSettings(); sfx('ui'); };
       seg.appendChild(b);
     }
     row.appendChild(seg); box.appendChild(row);
@@ -579,7 +630,7 @@ function frame(now) {
     H.r += (H.rt - H.r) * Math.min(1, dt * 6);
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
-    wander(dt, now); eatStep(); fallStep(dt); if (state === 'play') lostCheck(dt);
+    wander(dt, now); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play') lostCheck(dt);
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
@@ -595,15 +646,15 @@ function frame(now) {
 
 // ------------------------------------------------------------------ for the tests
 window.__rh = {
-  wanderOnce(dt) { wander(dt, performance.now()); },
+  wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; },
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
   start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
   teleport(x, z) { H.x = x; H.z = z; H.vx = H.vz = 0; plan(); makeCells(1000); },
   setXp(xp) { setXp(xp); H.r = H.rt; },
-  nearestEdible() {
+  nearestEdible(re) {                                              // the nearest thing the hole can eat (only types matching re, if given)
     let best = null, bd = 1e30;
-    for (const c of CELLS.values()) for (const o of c.objs) { if (o.state || !W.canEat(o.r, H.r)) continue; const d = (o.x - H.x) ** 2 + (o.z - H.z) ** 2; if (d < bd) { bd = d; best = o; } }
+    for (const c of CELLS.values()) for (const o of c.objs) { if (o.state || !W.canEat(o.r, H.r) || (re && !re.test(W.TYPES[o.ty].id))) continue; const d = (o.x - H.x) ** 2 + (o.z - H.z) ** 2; if (d < bd) { bd = d; best = o; } }
     return best ? { x: best.x, z: best.z, r: best.r, type: W.TYPES[best.ty].id, d: Math.sqrt(bd) } : null;
   },
   standing() { let n = 0; for (const c of CELLS.values()) for (const o of c.objs) if (!o.state) n++; return n; },

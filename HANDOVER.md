@@ -25,9 +25,11 @@ Four choices, each with the trade-offs explained and a recommendation (24 Novemb
 - **Things stay inside cells and cells are made from the seed alone.** Nothing is stored for the map. The same seed gives the same map, which is also what online play needs (two players only have to share a number).
 - **Things you eat grow back** when their cell is dropped and made again. The alternative (remember every eaten thing) would grow without end. The cost: you can regrow an area by leaving and coming back, which makes farming a spot possible. Accepted, since the xp of a thing falls as you outgrow it.
 - **The hole is a cut-out in the ground**, drawn by a shader (every pixel inside the circle is thrown away), with a dark pit underneath. Things that fall pass below the ground and are only seen through the gap. This gives a pixel-exact round hole with no extra geometry and nothing to clip.
-- **The hole is never hidden.** A tall building in front of it would hide it in an isometric view, so the hole has a yellow ring drawn over everything, and the upper parts of tall things lose a quarter of their pixels where they would cover the hole (low things are never touched).
+- **The hole is never hidden, and nothing blocks the camera.** A tall building in front of or over the hole would hide it in an isometric view. The hole has a yellow ring drawn over everything, and any thing too big to eat that is over the hole, in front of it or just beside that line dissolves (to 80%, in the pixel pattern of the post filter) while it is in the way. The first version cut a patch out of tall things only; the owner wanted the whole thing to dissolve when the hole is under it. It is a dissolve and not smooth see-through, because blending would need sorting of thousands of instanced boxes, and the dissolve matches the dithered look.
 - **Big things don't block.** The hole passes under anything too big for it (as in hole.io). The alternative, solid obstacles, was not chosen.
-- **Streets are radial roads and ring roads** in the same ring-and-sector space as the areas, so blocks keep their shape at every distance, and no grid seam appears where the ring changes.
+- **A framework of plots, so everything is believable** (second round, at the owner's request). The map's square cells are now plots, each of one area and one kind (a farm, a clearing, a city block ...), and every kind has a layout built from the same tools: things in rows facing a road, fences round a garden, animals inside a pen, plants at the foot of trees, kerb furniture along a pavement, traffic in the lanes. A thing is only ever placed where it makes sense (see `AGENTS.md`). The first build scattered every thing at random across its area with only a size rule, which put cars off the road and houses at any angle. The cost is that a plot is the unit of the map: areas change at cell edges (about 32 m wide at the start, twice as wide in each ring), and every plot of one kind has the same recipe, so variety comes from the random choices within it.
+- **Cities are a square street grid**, not the first build's radial roads and ring roads. Rows of buildings facing a street need straight edges and right angles, which a spiderweb cannot give. Roads run along cell edges, so a block is a cell with a pavement all round. Ring by ring the cells (and so the blocks) double in size and the streets stay in proportion; every second street of one ring continues into the next and the others end at the ring's edge, as side streets do. A road is as wide as the ring's scale, so through-streets widen at a ring edge. Buildings are low near the start (shops, terraces) and taller further out (flats from 120 m, offices 220 m, towers 400 m, skyscrapers 840 m, where a block is big enough for one).
+- **Mouse steering can be turned off** (M, or Mouse Steering in Settings), for playing on the keyboard with the pointer free. Saved with the settings.
 - **A small hole far out is not trapped.** Everything out there is huge, and the hole's speed is in proportion to its size, so the walk home could take hours. The speed never falls below that of a hole a quarter the size the place suits, a hint says what to do after 6 seconds with nothing to eat, and the menu has Return to Start.
 
 ## 4. Decisions waiting for the owner
@@ -41,26 +43,26 @@ Four choices, each with the trade-offs explained and a recommendation (24 Novemb
 
 ## 5. Measured numbers
 
-**Tests (24 November 2026):** `node tests/world.test.js`: 286 passed. `node tests/browser/run-all.js`: both files passed, repeated runs stable. All run in headless Chromium with software drawing, so no frame rate on a real graphics card or a phone has been measured. The game was never run on a real device.
+**Tests (24 November 2026):** `node tests/world.test.js`: 332 passed. `node tests/browser/run-all.js`: both files passed, repeated runs stable. All run in headless Chromium with software drawing, so no frame rate on a real graphics card or a phone has been measured. The game was never run on a real device.
 
-**The climb (`node tools/sim-pace.js`).** An estimate for a steady player who sweeps the ground at 60% efficiency, found by making real map cells at the right size for each level. A real player pauses, takes wrong turns and wanders, so real times are longer (allow about half as fast again). Early levels are meant to be quick. The tool counts: things a hole of that size can eat per second (density of food times the area the hole sweeps, which is its width times its speed), the xp each is worth, and the xp a level needs. Some rows are uneven because the sample landed near a ring edge, where a cell is only partly in its ring; read the trend.
+**The climb (`node tools/sim-pace.js`).** An estimate for a steady player who sweeps the ground at 60% efficiency, found by making real map cells at the right size for each level. A real player pauses, takes wrong turns and wanders, so real times are longer (allow about half as fast again). Early levels are meant to be quick. The tool counts: things a hole of that size can eat per second (density of food times the area the hole sweeps, which is its width times its speed), the xp each is worth, and the xp a level needs. Some rows are uneven because the sample landed near a ring edge, where a cell is only partly in its ring, or on a plot with little food in it (a pond, a car park); read the trend.
 
-| Level | Hole width | Things eaten a second | xp per thing | Things to eat per level | Minutes per level | Hours so far |
-|---|---|---|---|---|---|---|
-| 1 | 1.0 m | 0.64 | 0.17 | 1.2 | 0.03 | 0.00 |
-| 10 | 1.7 m | 0.37 | 0.15 | 1.7 | 0.09 | 0.01 |
-| 25 | 2.5 m | 0.44 | 0.15 | 2.2 | 0.11 | 0.04 |
-| 50 | 4.0 m | 0.29 | 0.15 | 3.3 | 0.25 | 0.10 |
-| 100 | 8.4 m | 0.40 | 0.15 | 6.5 | 0.32 | 0.32 |
-| 200 | 25 m | 0.56 | 0.15 | 10.3 | 0.46 | 1.0 |
-| 300 | 62 m | 0.31 | 0.15 | 15.6 | 1.2 | 2.2 |
-| 500 | 275 m | 0.30 | 0.15 | 20.9 | 2.1 | 6.2 |
-| 800 | 1.72 km | 0.52 | 0.15 | 38.8 | 2.0 | 15.6 |
-| 1,000 | 5.0 km | | | | | about 24 |
+| Level | Hole width | Things eaten a second | xp per thing | Minutes per level | Hours so far |
+|---|---|---|---|---|---|
+| 1 | 1.0 m | 0.60 | 0.32 | 0.01 | 0.00 |
+| 10 | 1.7 m | 0.17 | 0.19 | 0.11 | 0.01 |
+| 25 | 2.5 m | 0.21 | 0.19 | 0.13 | 0.05 |
+| 50 | 4.0 m | 0.15 | 0.23 | 0.23 | 0.12 |
+| 100 | 8.4 m | 0.20 | 0.17 | 0.41 | 0.34 |
+| 200 | 25 m | 0.27 | 0.20 | 0.49 | 1.07 |
+| 300 | 62 m | 0.20 | 0.25 | 0.81 | 2.4 |
+| 500 | 275 m | 0.19 | 0.18 | 1.9 | 6.7 |
+| 800 | 1.72 km | 0.29 | 0.20 | 1.8 | 18.7 |
+| 1,000 | 5.0 km | | | | about 29 |
 
-Before the owner's feedback (first build) the same estimate was: 42 minutes to level 100, 2.4 hours to level 200, about 63 hours to the cap, and the hole was 8% wider by level 10. Now: about 19 minutes to level 100 and about 24 hours to the cap, and 1.7 times wider by level 10. The numbers that set it are `CURVE`, `need()` and the flat part of `xpFor()` in `src/world.js`, the density (`lam`) of things, and `SPEED` in `src/game.js` (also in `tools/sim-pace.js`).
+History of the same estimate: first build 42 minutes to level 100 and about 63 hours to the cap; after the first feedback (faster curve, more food) 19 minutes and 24 hours; after the plot framework put the same food in tidier places the estimate went to 37 minutes and 52 hours (less food per area, because streets, verges, gardens and ponds are empty of it), so the density of everything scattered was raised (`DENSITY` 1.8 in `src/world.js`) and the xp a level needs lowered (0.2 to 0.14): now 20 minutes and 29 hours. The numbers that set it are `CURVE`, `need()` and the flat part of `xpFor()`, `DENSITY` and the per-100 counts in the layouts, and `SPEED` in `src/game.js` (also in `tools/sim-pace.js`).
 
-**Cost:** a cell takes about 2 ms to make. The village at level 10 is about 42 draw calls and 92,000 triangles (2,000 things in view); a city at level 330 is about 50 draw calls and 56,000. The budget is 14,000 things made at once.
+**Cost:** a cell takes about 2 ms to make. Views of a village, a farm, a clearing and a pond at levels 9 to 78 were 48 to 81 draw calls and 44,000 to 70,000 triangles (330 to 820 things); a city at level 330 was about 50 draw calls and 56,000. The budget is 14,000 things made at once.
 
 ## 6. Ideas
 
@@ -70,7 +72,9 @@ Boost button (with a cost), power-ups, a minimap or a compass to the start, rare
 
 - **Dust.** A hole much bigger than the cells it sits in (for example a level 500 hole at the start) does not make things smaller than 5% of its radius, and makes at most the nearest 14,000 things, so the area near it can look bare. By design: it has outgrown it.
 - **Tall things far out.** The depth range of the camera covers things up to about 700 hole radii tall. A level 1 hole far out in a city can see skyscrapers taller than that cut off at the top. Only reachable by walking very far at a low level.
-- **Things overlap at ring edges.** Cells never overlap within a ring, but at the line where one ring ends and the next begins a big thing in one can overlap one in the other.
+- **Ring edges are untidy.** Cells never overlap within a ring, but a cell that straddles the line where one ring ends and the next begins holds things only on its own side of it, so a plot is cut off there, and a big thing in one ring can overlap one in the next. Streets that are side streets in one ring end at the ring edge. The ground tiles are coloured from the plot they are in, so they match.
+- **The dissolve is generous.** A big thing within 2.2 hole radii of the line between the hole and the camera dissolves, so in a dense city a few buildings near the hole can be faded at once. If that feels like too much, the margin is in `fadeStep()`.
+- **Plots are the unit.** An area changes at a cell edge, so the boundary between a village and a forest is a stair of squares.
 - **Audio was not heard.** `sound.test.js` checks that tones start and nothing errors, not how they sound.
 - **Nothing is saved except position, xp and the count.** Eaten things grow back; settings are separate.
 
@@ -78,3 +82,4 @@ Boost button (with a cost), power-ups, a minimap or a compass to the start, rare
 
 - **24 November 2026: first build (solo).** The world rules and map (levels to 1,000, villages, forests and cities with 55 voxel things, streets in cities), the isometric pixel-art renderer, the hole with its pit and ring, eating and falling, steering by mouse, keys and touch, the HUD, the menu and settings, saving, sound, and the tests and tools. Online play and bots are not in it.
 - **24 November 2026: the owner's first feedback.** (1) Things beside the hole looked dark: a see-through effect meant for tall buildings was also applied to small things next to the hole, and the outlines were heavy on small things; now only the upper parts (above 1.6 hole radii) of tall things are cut away, and only a quarter of their pixels, the outlines are softer, and the pit's walls are lighter so a falling thing reads. (2) A finer floor: tiles about half the size. (3) Faster growth: a quicker growth curve, a faster hole (6.5 radii a second, was 5.5), more things to eat, and the numbers above. (4) A livelier village: houses (three colours), a cottage, a shed, an apple tree, a horse, a pig, a dog, a cat, ducks, rabbits, a gnome, crates, barrels, fences, hedges, a picnic table and more, with bigger things in sight at the start that come within reach after a few levels; animals now wander. Forests got squirrels and foxes and cities pigeons.
+- **24 November 2026: the second round of feedback.** (1) A framework for every area to follow (plots, roads, layouts), with villages, forests and cities rebuilt on it so everything stands where it belongs: cities have a square street grid with pavements, lamps, street trees, bins, traffic lights, cars in the lanes (driving on the left), rows of buildings facing the street and courtyards behind, parks, plazas and car parks; villages have houses facing lanes in fenced gardens with postboxes, farms with paddocks and yards, pastures, fields, orchards, greens and ponds; forests have woods with plants at the foot of the trees, clearings with a cabin and campfire, rocky ground, ponds and groves, with trees kept off trails. New things: terraces, park and street trees, fountain, traffic light, reeds, campfire, woodpile. (2) Mouse steering can be turned off (M, or Settings). (3) A too-big thing dissolves while the hole is under it or it is in the way of the camera. The food density and xp per level were retuned (see section 5).
