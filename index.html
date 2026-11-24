@@ -140,7 +140,7 @@ const D0 = 120;                    // metres out where things are twice the star
 const R0 = 0.5;                    // the hole's radius at level 1 (m)
 const MAXLV = 1000;                // the level cap
 const REACH = 5000;                // how many times wider the hole is at the cap than at level 1
-const G = Math.pow(REACH, 1 / (MAXLV - 1));   // growth of the radius per level
+const CURVE = 0.6;                 // how the growth is spread over the levels: 1 would be the same share every level; less is quicker at first
 const C0 = 32;                     // a map cell is this wide (m) in the first ring, and twice as wide in each next one
 const EAT_MAX = 0.92;              // a hole swallows things up to this fraction of its own radius
 const SPAWN_CLEAR = 3;             // nothing stands this close to the start (m)
@@ -164,9 +164,11 @@ const rng = seed => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>
 
 // ------------------------------------------------------------------ levels
 // Eating gives xp; a level needs a little more xp than the one before. The hole's radius grows smoothly with xp:
-// R0 at level 1, REACH times that at the cap. The xp a thing gives is its size next to the hole's, squared, plus a
-// small flat part, so small things still count at the start and a thing nearly your size is worth a lot.
-const need = L => 0.2 * Math.pow(1 + L / 20, 1.15);               // xp to get from level L to L + 1
+// R0 at level 1, REACH times that at the cap. The growth is quick at first (about 8% a level at the start, 3% by level
+// 10, 1.3% by level 100, half a per cent at the cap), so the first minutes show a hole visibly getting bigger. The xp a
+// thing gives is its size next to the hole's, squared, plus a small flat part, so small things still count at the start
+// and a thing nearly your size is worth a lot.
+const need = L => 0.2 * Math.pow(1 + L / 25, 1.1);               // xp to get from level L to L + 1
 const CUM = new Float64Array(MAXLV + 2);                          // CUM[L] = xp at which level L begins
 for (let L = 1; L <= MAXLV; L++) CUM[L + 1] = CUM[L] + need(L);
 const MAXXP = CUM[MAXLV];
@@ -176,7 +178,7 @@ function progress(xp) {                                           // { level, fr
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (CUM[mid] <= xp) lo = mid; else hi = mid - 1; }
   return { level: lo, frac: (xp - CUM[lo]) / need(lo) };
 }
-const radiusAt = (level, frac = 0) => R0 * Math.pow(G, level - 1 + frac);
+const radiusAt = (level, frac = 0) => R0 * Math.pow(REACH, Math.pow(Math.min(level - 1 + frac, MAXLV - 1) / (MAXLV - 1), CURVE));
 const xpFor = (objR, holeR) => { const q = objR / holeR; return 0.015 + q * q; };
 const canEat = (objR, holeR) => objR <= holeR * EAT_MAX;
 const swallowDist = (objR, holeR) => holeR - 0.35 * objR;         // the hole's centre must be this close to the thing's
@@ -236,37 +238,55 @@ function groundColour(x, z, tx, tz) {                             // the colour 
 // the natural radius b (metres at the start; everything is multiplied by the local scale where it stands).
 // P(width, height, depth, colour, x, y, z): a box standing on height y, centred on x and z. Colour 'T' takes the
 // variant's colour. lam: how many stand in 100 m2 at the start (they thin out as 1 / scale squared). from: how far
-// out (m) before it appears. on: 'road' only on a street, 'block' only between streets, else anywhere.
+// out (m) before it appears. on: 'road' only on a street, 'block' only between streets, else anywhere. walk: how fast
+// it wanders, in metres a second at the starting size (animals); 0 stands still.
 const P = (w, h, d, c, x = 0, y = 0, z = 0) => [w, h, d, c, x, y, z];
 const TYPES = [];
 function def(biome, id, name, b, lam, from, parts, o = {}) {
   const tints = o.tints || [null];
   tints.forEach((tc, n) => TYPES.push({
-    biome, id: o.tints ? id + n : id, kind: id, name, b, lam: lam / tints.length, from, on: o.on || 'any',
+    biome, id: o.tints ? id + n : id, kind: id, name, b, lam: lam / tints.length, from, on: o.on || 'any', walk: o.walk || 0,
     parts: parts.map(p => p[3] === 'T' ? [p[0], p[1], p[2], tc, p[4], p[5], p[6]] : p),
   }));
 }
 const WOOD = '#8a5a30', DWOOD = '#5a3d22', WHITE = '#f4f1ea', DARK = '#2a2a33', GLASS = '#9fd8ff', ROOF = '#a8472f', STONE = '#8a8f9a';
 const rows = (w, d, y0, step, n, col, h = 1.2) => Array.from({ length: n }, (_, k) => P(w + 0.3, h, d + 0.3, col, 0, y0 + k * step, 0));
-// -- village
-def('village', 'flower', 'Flower', 0.08, 14, 0, [P(1, 4, 1, '#3f9a3c'), P(3, 1, 3, 'T', 0, 4, 0), P(1, 1, 1, '#ffd34d', 0, 5, 0)], { tints: ['#ff5d7a', '#ffd34d', '#f4f4f4', '#9a6bff'] });
-def('village', 'bucket', 'Bucket', 0.14, 4, 0, [P(4, 3, 4, '#8a93a3'), P(2, 1, 2, '#3a3f4d', 0, 3, 0)]);
-def('village', 'chicken', 'Chicken', 0.16, 3, 0, [P(3, 3, 4, WHITE), P(2, 2, 2, WHITE, 0, 3, -2), P(1, 1, 1, '#f2a33a', 0, 3, -3.5), P(1, 1, 1, '#d6443c', 0, 5, -2), P(1, 2, 1, WHITE, 0, 3, 2.5)]);
+// -- village: small things to eat from the first step, bigger ones in sight at the start (a cow, a pig, a shed, houses)
+// that come within reach a few levels at a time, and animals that wander about
+def('village', 'flower', 'Flower', 0.08, 20, 0, [P(1, 4, 1, '#3f9a3c'), P(3, 1, 3, 'T', 0, 4, 0), P(1, 1, 1, '#ffd34d', 0, 5, 0)], { tints: ['#ff5d7a', '#ffd34d', '#f4f4f4', '#9a6bff'] });
+def('village', 'gnome', 'Garden Gnome', 0.1, 2, 0, [P(3, 3, 3, '#3d6fd1'), P(3, 2, 3, '#f0c8a0', 0, 3, 0), P(3, 3, 3, '#d6443c', 0, 5, 0), P(3, 1, 1, '#ffffff', 0, 3, -1.5)]);
+def('village', 'rabbit', 'Rabbit', 0.12, 2, 0, [P(3, 3, 4, '#c9b8a0'), P(2, 2, 2, '#c9b8a0', 0, 3, -2), P(1, 3, 1, '#c9b8a0', -0.7, 5, -2), P(1, 3, 1, '#c9b8a0', 0.7, 5, -2), P(1, 1, 1, '#ffffff', 0, 2, 2.5)], { walk: 0.7 });
+def('village', 'duck', 'Duck', 0.13, 3, 0, [P(3, 2, 4, '#f2d34a'), P(2, 2, 2, '#f2d34a', 0, 2, -2), P(1, 1, 1, '#f2863a', 0, 2, -3.5), P(1, 1, 1, '#f2d34a', 0, 2, 2.5)], { walk: 0.25 });
+def('village', 'bucket', 'Bucket', 0.14, 5, 0, [P(4, 3, 4, '#8a93a3'), P(2, 1, 2, '#3a3f4d', 0, 3, 0)]);
+def('village', 'chicken', 'Chicken', 0.16, 4, 0, [P(3, 3, 4, WHITE), P(2, 2, 2, WHITE, 0, 3, -2), P(1, 1, 1, '#f2a33a', 0, 3, -3.5), P(1, 1, 1, '#d6443c', 0, 5, -2), P(1, 2, 1, WHITE, 0, 3, 2.5)], { walk: 0.35 });
 def('village', 'mailbox', 'Postbox', 0.12, 1.5, 0, [P(1, 5, 1, '#7a5a3a'), P(3, 2, 4, '#3d6fd1', 0, 5, 0)]);
-def('village', 'haybale', 'Hay Bale', 0.3, 2.5, 0, [P(6, 4, 4, '#e1c35a'), P(1, 4, 5, '#b8963a', -2, 0, 0), P(1, 4, 5, '#b8963a', 2, 0, 0)]);
+def('village', 'cat', 'Cat', 0.15, 1, 0, [P(2, 3, 5, '#e8a24a'), P(3, 3, 3, '#e8a24a', 0, 3, -3), P(1, 1, 1, '#e8a24a', -1, 6, -3), P(1, 1, 1, '#e8a24a', 1, 6, -3), P(1, 4, 1, '#e8a24a', 0, 3, 3)], { walk: 0.5 });
+def('village', 'crate', 'Crate', 0.2, 2.5, 0, [P(4, 4, 4, '#a8803c'), P(4.2, 0.6, 4.2, '#6a4a22', 0, 1.7, 0)]);
+def('village', 'barrel', 'Barrel', 0.22, 2, 0, [P(4, 5, 4, '#7a5a3a'), P(4.4, 0.6, 4.4, '#3a3f4d', 0, 1, 0), P(4.4, 0.6, 4.4, '#3a3f4d', 0, 3.8, 0)]);
+def('village', 'dog', 'Dog', 0.28, 1, 0, [P(3, 3, 6, '#a87a4a', 0, 2, 0), P(3, 3, 3, '#a87a4a', 0, 4, -4), P(1, 2, 1, '#7a5230', -1.5, 4, -4), P(1, 2, 1, '#7a5230', 1.5, 4, -4), P(1, 3, 1, '#a87a4a', 0, 4, 3.5), P(1, 2, 1, '#7a5230', -1, 0, -2), P(1, 2, 1, '#7a5230', 1, 0, -2), P(1, 2, 1, '#7a5230', -1, 0, 2), P(1, 2, 1, '#7a5230', 1, 0, 2)], { walk: 0.7 });
+def('village', 'haybale', 'Hay Bale', 0.3, 3, 0, [P(6, 4, 4, '#e1c35a'), P(1, 4, 5, '#b8963a', -2, 0, 0), P(1, 4, 5, '#b8963a', 2, 0, 0)]);
+def('village', 'wheelbarrow', 'Wheelbarrow', 0.3, 1, 0, [P(4, 2, 6, '#3f9a5a', 0, 2, 0), P(1, 1, 5, '#7a5a3a', -1.5, 1, 3), P(1, 1, 5, '#7a5a3a', 1.5, 1, 3), P(1, 3, 3, DARK, 0, 0, -3), P(1, 3, 1, '#7a5a3a', -1.5, 0, 5), P(1, 3, 1, '#7a5a3a', 1.5, 0, 5)]);
+def('village', 'fence', 'Fence', 0.35, 3, 0, [P(1, 4, 1, '#c8a06a', -3, 0, 0), P(1, 4, 1, '#c8a06a', 3, 0, 0), P(7, 1, 0.6, '#c8a06a', 0, 1, 0), P(7, 1, 0.6, '#c8a06a', 0, 3, 0)]);
 def('village', 'bench', 'Bench', 0.4, 1.2, 0, [P(8, 1, 3, '#9a6b3d', 0, 2, 0), P(8, 3, 1, '#9a6b3d', 0, 3, -1), P(1, 2, 3, DWOOD, -3, 0, 0), P(1, 2, 3, DWOOD, 3, 0, 0)]);
-def('village', 'scarecrow', 'Scarecrow', 0.28, 0.8, 0, [P(1, 9, 1, '#7a5a3a'), P(7, 1, 1, '#7a5a3a', 0, 6, 0), P(3, 4, 2, '#3d6fd1', 0, 4, 0), P(3, 3, 3, '#e3c27a', 0, 8, 0), P(5, 1, 5, DWOOD, 0, 11, 0), P(3, 2, 3, DWOOD, 0, 12, 0)]);
-def('village', 'doghouse', 'Kennel', 0.4, 0.7, 0, [P(6, 4, 6, '#c8553d'), P(8, 1, 8, '#6b3a28', 0, 4, 0), P(6, 1, 6, '#6b3a28', 0, 5, 0), P(2, 2, 1, '#2a1a14', 0, 0, -3)]);
-def('village', 'sheep', 'Sheep', 0.45, 1.0, 0, [P(5, 4, 7, '#f3f1ea', 0, 2, 0), P(3, 3, 3, '#3a3a44', 0, 3, -5), P(1, 2, 1, '#3a3a44', -1.5, 0, -2.5), P(1, 2, 1, '#3a3a44', 1.5, 0, -2.5), P(1, 2, 1, '#3a3a44', -1.5, 0, 2.5), P(1, 2, 1, '#3a3a44', 1.5, 0, 2.5)]);
-def('village', 'cow', 'Cow', 0.7, 0.7, 40, [P(6, 5, 10, WHITE, 0, 3, 0), P(3, 0.4, 4, DARK, 1, 8, -1), P(2, 0.4, 3, DARK, -1.5, 8, 2.5), P(4, 4, 4, WHITE, 0, 5, -7), P(3, 2, 1, '#e9a0a0', 0, 5, -9.5), P(2, 3, 2, WHITE, -2, 0, -3.5), P(2, 3, 2, WHITE, 2, 0, -3.5), P(2, 3, 2, WHITE, -2, 0, 3.5), P(2, 3, 2, WHITE, 2, 0, 3.5)]);
-def('village', 'well', 'Well', 0.6, 0.3, 50, [P(8, 4, 8, STONE), P(6, 0.5, 6, '#3a6fd1', 0, 4, 0), P(1, 6, 1, '#7a5a3a', -3.5, 4, 0), P(1, 6, 1, '#7a5a3a', 3.5, 4, 0), P(10, 1, 6, '#9b3d2e', 0, 10, 0)]);
-def('village', 'tractor', 'Tractor', 1.0, 0.35, 80, [P(7, 5, 13, '#c8362e', 0, 3, 2), P(7, 6, 5, '#4a5666', 0, 8, -1), P(2, 6, 6, DARK, -5, 0, -3), P(2, 6, 6, DARK, 5, 0, -3), P(2, 4, 4, DARK, -4, 0, 6), P(2, 4, 4, DARK, 4, 0, 6)]);
-def('village', 'haystack', 'Haystack', 1.2, 0.3, 100, [P(10, 3, 10, '#e1c35a'), P(8, 3, 8, '#e8cc62', 0, 3, 0), P(6, 3, 6, '#e1c35a', 0, 6, 0), P(3, 2, 3, '#d9b84e', 0, 9, 0)]);
-def('village', 'silo', 'Silo', 1.4, 0.12, 120, [P(10, 20, 10, '#b7bcc8'), P(12, 2, 12, '#8c93a3', 0, 20, 0), P(8, 2, 8, '#8c93a3', 0, 22, 0)]);
-def('village', 'cottage', 'Cottage', 2.0, 0.2, 100, [P(16, 8, 12, '#e8dcc0'), P(18, 1, 14, ROOF, 0, 8, 0), P(14, 1, 12, ROOF, 0, 9, 0), P(10, 1, 10, ROOF, 0, 10, 0), P(3, 5, 1, '#6b4a2a', 0, 0, -6), P(3, 3, 1, '#6fb4e8', -5, 3, -6), P(3, 3, 1, '#6fb4e8', 5, 3, -6), P(2, 4, 2, '#7a3d2a', 4, 9, 2)]);
-def('village', 'barn', 'Barn', 3.2, 0.1, 160, [P(20, 12, 16, '#b8332b'), P(22, 1, 18, DWOOD, 0, 12, 0), P(18, 1, 16, DWOOD, 0, 13, 0), P(14, 1, 14, DWOOD, 0, 14, 0), P(8, 1, 12, DWOOD, 0, 15, 0), P(8, 8, 1, WHITE, 0, 0, -8.2), P(6, 6, 1, '#7a1f1a', 0, 0, -8.5)]);
-def('village', 'windmill', 'Windmill', 2.6, 0.07, 240, [P(10, 6, 10, '#e8dcc0'), P(8, 6, 8, '#e8dcc0', 0, 6, 0), P(6, 6, 6, '#e8dcc0', 0, 12, 0), P(8, 2, 8, ROOF, 0, 18, 0), P(14, 1, 1, WHITE, 0, 16, -4), P(1, 14, 1, WHITE, 0, 9, -4.5), P(2, 2, 2, DWOOD, 0, 15.5, -3.6)]);
-def('village', 'church', 'Church', 3.5, 0.06, 360, [P(14, 10, 24, '#e8e2d4', 0, 0, 4), P(16, 1, 26, '#6a5a6a', 0, 10, 4), P(12, 1, 26, '#6a5a6a', 0, 11, 4), P(8, 1, 26, '#6a5a6a', 0, 12, 4), P(8, 18, 8, '#e8e2d4', 0, 0, -9), P(6, 3, 6, '#6a5a6a', 0, 18, -9), P(4, 3, 4, '#6a5a6a', 0, 21, -9), P(2, 4, 2, '#6a5a6a', 0, 24, -9), P(4, 6, 1, '#4a3a2a', 0, 0, -13.2)]);
+def('village', 'scarecrow', 'Scarecrow', 0.28, 1, 0, [P(1, 9, 1, '#7a5a3a'), P(7, 1, 1, '#7a5a3a', 0, 6, 0), P(3, 4, 2, '#3d6fd1', 0, 4, 0), P(3, 3, 3, '#e3c27a', 0, 8, 0), P(5, 1, 5, DWOOD, 0, 11, 0), P(3, 2, 3, DWOOD, 0, 12, 0)]);
+def('village', 'doghouse', 'Kennel', 0.4, 1, 0, [P(6, 4, 6, '#c8553d'), P(8, 1, 8, '#6b3a28', 0, 4, 0), P(6, 1, 6, '#6b3a28', 0, 5, 0), P(2, 2, 1, '#2a1a14', 0, 0, -3)]);
+def('village', 'hedge', 'Hedge', 0.5, 1.5, 0, [P(8, 4, 3, '#2f7a3a'), P(6, 1, 2, '#3f9a46', 0, 4, 0)]);
+def('village', 'sheep', 'Sheep', 0.45, 1.5, 0, [P(5, 4, 7, '#f3f1ea', 0, 2, 0), P(3, 3, 3, '#3a3a44', 0, 3, -5), P(1, 2, 1, '#3a3a44', -1.5, 0, -2.5), P(1, 2, 1, '#3a3a44', 1.5, 0, -2.5), P(1, 2, 1, '#3a3a44', -1.5, 0, 2.5), P(1, 2, 1, '#3a3a44', 1.5, 0, 2.5)], { walk: 0.25 });
+def('village', 'pig', 'Pig', 0.5, 0.9, 0, [P(5, 4, 8, '#f0a8b0', 0, 2, 0), P(4, 4, 3, '#f0a8b0', 0, 3, -5.5), P(2, 2, 1, '#e08890', 0, 3, -7.5), P(1.5, 2, 1.5, '#e08890', -1.5, 0, -2.5), P(1.5, 2, 1.5, '#e08890', 1.5, 0, -2.5), P(1.5, 2, 1.5, '#e08890', -1.5, 0, 2.5), P(1.5, 2, 1.5, '#e08890', 1.5, 0, 2.5), P(1, 1, 1, '#e08890', 0, 5, 4.5)], { walk: 0.3 });
+def('village', 'cow', 'Cow', 0.7, 1.0, 0, [P(6, 5, 10, WHITE, 0, 3, 0), P(3, 0.4, 4, DARK, 1, 8, -1), P(2, 0.4, 3, DARK, -1.5, 8, 2.5), P(4, 4, 4, WHITE, 0, 5, -7), P(3, 2, 1, '#e9a0a0', 0, 5, -9.5), P(2, 3, 2, WHITE, -2, 0, -3.5), P(2, 3, 2, WHITE, 2, 0, -3.5), P(2, 3, 2, WHITE, -2, 0, 3.5), P(2, 3, 2, WHITE, 2, 0, 3.5)], { walk: 0.2 });
+def('village', 'picnic', 'Picnic Table', 0.6, 0.4, 5, [P(10, 1, 6, '#9a6b3d', 0, 4, 0), P(10, 1, 2, '#9a6b3d', 0, 2, -4), P(10, 1, 2, '#9a6b3d', 0, 2, 4), P(1, 4, 6, DWOOD, -4, 0, 0), P(1, 4, 6, DWOOD, 4, 0, 0)]);
+def('village', 'well', 'Well', 0.6, 0.4, 10, [P(8, 4, 8, STONE), P(6, 0.5, 6, '#3a6fd1', 0, 4, 0), P(1, 6, 1, '#7a5a3a', -3.5, 4, 0), P(1, 6, 1, '#7a5a3a', 3.5, 4, 0), P(10, 1, 6, '#9b3d2e', 0, 10, 0)]);
+def('village', 'horse', 'Horse', 0.9, 0.35, 20, [P(5, 6, 12, '#8a5a30', 0, 6, 0), P(3, 5, 4, '#8a5a30', 0, 10, -8), P(1, 5, 5, '#3a2414', 0, 10, -5), P(1.5, 6, 1.5, '#6a4a22', -1.5, 0, -4.5), P(1.5, 6, 1.5, '#6a4a22', 1.5, 0, -4.5), P(1.5, 6, 1.5, '#6a4a22', -1.5, 0, 4.5), P(1.5, 6, 1.5, '#6a4a22', 1.5, 0, 4.5), P(1, 5, 1, '#3a2414', 0, 6, 6.5)], { walk: 0.5 });
+def('village', 'tractor', 'Tractor', 1.0, 0.4, 25, [P(7, 5, 13, '#c8362e', 0, 3, 2), P(7, 6, 5, '#4a5666', 0, 8, -1), P(2, 6, 6, DARK, -5, 0, -3), P(2, 6, 6, DARK, 5, 0, -3), P(2, 4, 4, DARK, -4, 0, 6), P(2, 4, 4, DARK, 4, 0, 6)]);
+def('village', 'appletree', 'Apple Tree', 1.0, 0.8, 8, [P(2, 6, 2, '#6a4a2a'), P(9, 4, 9, '#3f9a46', 0, 6, 0), P(7, 3, 7, '#4aa84e', 0, 10, 0), P(1, 1, 1, '#d6443c', 3.6, 7, 1), P(1, 1, 1, '#d6443c', -3.6, 6.5, -1.5), P(1, 1, 1, '#d6443c', 1, 10, 3.4), P(1, 1, 1, '#d6443c', -1.5, 10.5, -3.4)]);
+def('village', 'shed', 'Shed', 1.1, 0.35, 12, [P(9, 6, 8, '#a8803c'), P(10, 1, 9, DWOOD, 0, 6, 0), P(8, 1, 7, DWOOD, 0, 7, 0), P(3, 4, 1, '#5a3d22', 0, 0, -4.2), P(2, 2, 1, '#8fd0f0', 3, 2, -4.2)]);
+def('village', 'haystack', 'Haystack', 1.2, 0.5, 8, [P(10, 3, 10, '#e1c35a'), P(8, 3, 8, '#e8cc62', 0, 3, 0), P(6, 3, 6, '#e1c35a', 0, 6, 0), P(3, 2, 3, '#d9b84e', 0, 9, 0)]);
+def('village', 'silo', 'Silo', 1.4, 0.2, 40, [P(10, 20, 10, '#b7bcc8'), P(12, 2, 12, '#8c93a3', 0, 20, 0), P(8, 2, 8, '#8c93a3', 0, 22, 0)]);
+def('village', 'cottage', 'Cottage', 2.0, 0.5, 10, [P(16, 8, 12, '#e8dcc0'), P(18, 1, 14, ROOF, 0, 8, 0), P(14, 1, 12, ROOF, 0, 9, 0), P(10, 1, 10, ROOF, 0, 10, 0), P(3, 5, 1, '#6b4a2a', 0, 0, -6), P(3, 3, 1, '#6fb4e8', -5, 3, -6), P(3, 3, 1, '#6fb4e8', 5, 3, -6), P(2, 4, 2, '#7a3d2a', 4, 9, 2)]);
+def('village', 'house', 'House', 2.5, 0.35, 25, [P(16, 6, 14, 'T'), P(16.4, 6, 14.4, 'T', 0, 6, 0), P(18, 1, 16, '#9b3d2e', 0, 12, 0), P(14, 1, 14, '#9b3d2e', 0, 13, 0), P(10, 1, 12, '#9b3d2e', 0, 14, 0), P(6, 1, 10, '#9b3d2e', 0, 15, 0), P(3, 5, 1, '#5a3d22', 0, 0, -7.2), P(3, 3, 1, GLASS, -5, 2, -7.2), P(3, 3, 1, GLASS, 5, 2, -7.2), P(3, 3, 1, GLASS, -5, 8, -7.4), P(3, 3, 1, GLASS, 0, 8, -7.4), P(3, 3, 1, GLASS, 5, 8, -7.4), P(2, 5, 2, '#7a3d2a', 5, 12, 3)], { tints: ['#e8dcc0', '#d9a87a', '#c8d8e0'] });
+def('village', 'barn', 'Barn', 3.2, 0.15, 40, [P(20, 12, 16, '#b8332b'), P(22, 1, 18, DWOOD, 0, 12, 0), P(18, 1, 16, DWOOD, 0, 13, 0), P(14, 1, 14, DWOOD, 0, 14, 0), P(8, 1, 12, DWOOD, 0, 15, 0), P(8, 8, 1, WHITE, 0, 0, -8.2), P(6, 6, 1, '#7a1f1a', 0, 0, -8.5)]);
+def('village', 'windmill', 'Windmill', 2.6, 0.1, 80, [P(10, 6, 10, '#e8dcc0'), P(8, 6, 8, '#e8dcc0', 0, 6, 0), P(6, 6, 6, '#e8dcc0', 0, 12, 0), P(8, 2, 8, ROOF, 0, 18, 0), P(14, 1, 1, WHITE, 0, 16, -4), P(1, 14, 1, WHITE, 0, 9, -4.5), P(2, 2, 2, DWOOD, 0, 15.5, -3.6)]);
+def('village', 'church', 'Church', 3.5, 0.08, 150, [P(14, 10, 24, '#e8e2d4', 0, 0, 4), P(16, 1, 26, '#6a5a6a', 0, 10, 4), P(12, 1, 26, '#6a5a6a', 0, 11, 4), P(8, 1, 26, '#6a5a6a', 0, 12, 4), P(8, 18, 8, '#e8e2d4', 0, 0, -9), P(6, 3, 6, '#6a5a6a', 0, 18, -9), P(4, 3, 4, '#6a5a6a', 0, 21, -9), P(2, 4, 2, '#6a5a6a', 0, 24, -9), P(4, 6, 1, '#4a3a2a', 0, 0, -13.2)]);
 // -- forest
 def('forest', 'mushroom', 'Mushroom', 0.09, 10, 0, [P(2, 3, 2, '#f2ede0'), P(5, 2, 5, '#d6443c', 0, 3, 0), P(3, 1, 3, '#d6443c', 0, 5, 0), P(1, 0.4, 1, '#ffffff', 1, 5, 0.5), P(1, 0.4, 1, '#ffffff', -1, 5, -0.5)]);
 def('forest', 'fern', 'Fern', 0.14, 8, 0, [P(1, 2, 1, '#2f6a3a'), P(5, 1, 1, '#3f8a46', 0, 2, 0), P(1, 1, 5, '#3f8a46', 0, 2, 0), P(3, 1, 3, '#4f9a52', 0, 3, 0)]);
@@ -274,7 +294,9 @@ def('forest', 'stump', 'Stump', 0.22, 2.5, 0, [P(5, 3, 5, '#7a5a3a'), P(4, 1, 4,
 def('forest', 'rock', 'Rock', 0.3, 3, 0, [P(6, 3, 5, '#8a8f9a'), P(4, 2, 4, '#9aa0ab', 0, 3, 0), P(2, 1, 2, '#a8aeb8', 0, 5, 0)]);
 def('forest', 'log', 'Log', 0.4, 1.5, 0, [P(10, 3, 3, '#7a5a3a'), P(0.5, 2.4, 2.4, '#c8a06a', -5, 0.3, 0), P(0.5, 2.4, 2.4, '#c8a06a', 5, 0.3, 0)]);
 def('forest', 'bush', 'Bush', 0.5, 3.5, 0, [P(7, 4, 7, '#2f7a3a'), P(5, 2, 5, '#3f9a46', 0, 4, 0), P(3, 1, 3, '#4fb04f', 0, 6, 0), P(1, 1, 1, '#d6443c', 3.2, 2, 1)]);
-def('forest', 'deer', 'Deer', 0.65, 0.6, 60, [P(4, 4, 8, '#a8703c', 0, 5, 0), P(3, 3, 3, '#a8703c', 0, 8, -5), P(1, 3, 1, '#e8dcc0', -1, 11, -5), P(1, 3, 1, '#e8dcc0', 1, 11, -5), P(1, 5, 1, '#8a5a2c', -1.2, 0, -3), P(1, 5, 1, '#8a5a2c', 1.2, 0, -3), P(1, 5, 1, '#8a5a2c', -1.2, 0, 3), P(1, 5, 1, '#8a5a2c', 1.2, 0, 3), P(2, 2, 1, '#f2ede0', 0, 7, 4.5)]);
+def('forest', 'squirrel', 'Squirrel', 0.1, 1.5, 0, [P(2, 2, 3, '#b8703c'), P(2, 2, 2, '#b8703c', 0, 2, -1.5), P(1, 4, 1, '#c8803c', 0, 1, 2.5), P(1, 1, 1, '#2a1a14', 0, 3, -2.5)], { walk: 0.5 });
+def('forest', 'fox', 'Fox', 0.25, 0.6, 20, [P(3, 3, 6, '#d6702c', 0, 2, 0), P(3, 3, 3, '#d6702c', 0, 4, -4), P(1, 1, 1, '#d6702c', -1, 7, -4), P(1, 1, 1, '#d6702c', 1, 7, -4), P(2, 3, 4, '#d6702c', 0, 3, 5), P(2, 1, 2, '#ffffff', 0, 3, 7), P(1, 2, 1, '#2a2a33', -1, 0, -2), P(1, 2, 1, '#2a2a33', 1, 0, -2), P(1, 2, 1, '#2a2a33', -1, 0, 2), P(1, 2, 1, '#2a2a33', 1, 0, 2)], { walk: 0.7 });
+def('forest', 'deer', 'Deer', 0.65, 0.6, 40, [P(4, 4, 8, '#a8703c', 0, 5, 0), P(3, 3, 3, '#a8703c', 0, 8, -5), P(1, 3, 1, '#e8dcc0', -1, 11, -5), P(1, 3, 1, '#e8dcc0', 1, 11, -5), P(1, 5, 1, '#8a5a2c', -1.2, 0, -3), P(1, 5, 1, '#8a5a2c', 1.2, 0, -3), P(1, 5, 1, '#8a5a2c', -1.2, 0, 3), P(1, 5, 1, '#8a5a2c', 1.2, 0, 3), P(2, 2, 1, '#f2ede0', 0, 7, 4.5)], { walk: 0.4 });
 def('forest', 'pine', 'Pine Tree', 1.0, 2.0, 0, [P(2, 3, 2, '#6a4a2a'), P(9, 3, 9, '#2d6a3a', 0, 3, 0), P(7, 3, 7, '#35783f', 0, 6, 0), P(5, 3, 5, '#3f8a46', 0, 9, 0), P(3, 3, 3, '#4a9a50', 0, 12, 0), P(1, 2, 1, '#4a9a50', 0, 15, 0)]);
 def('forest', 'boulder', 'Boulder', 1.3, 0.5, 40, [P(14, 5, 12, '#7a808c'), P(10, 4, 9, '#8a909c', 0, 5, 0), P(6, 3, 6, '#9aa0ab', 0, 9, 0)]);
 def('forest', 'oak', 'Oak Tree', 1.7, 1.0, 20, [P(4, 8, 4, '#6a4a2a'), P(14, 5, 14, '#3f8a3a', 0, 8, 0), P(10, 4, 10, '#4aa046', 0, 13, 0), P(6, 2, 6, '#58b452', 0, 17, 0)]);
@@ -282,10 +304,11 @@ def('forest', 'cabin', 'Log Cabin', 2.2, 0.12, 120, [P(14, 7, 12, WOOD), P(16, 1
 def('forest', 'giantoak', 'Giant Oak', 3.2, 0.25, 150, [P(6, 14, 6, '#6a4a2a'), P(22, 6, 22, '#2f7a36', 0, 14, 0), P(16, 5, 16, '#3f9a46', 0, 20, 0), P(10, 4, 10, '#52b050', 0, 25, 0)]);
 def('forest', 'redwood', 'Redwood', 4.8, 0.1, 300, [P(6, 30, 6, '#7a4a2a'), P(20, 4, 20, '#2a6a38', 0, 26, 0), P(16, 4, 16, '#2e723c', 0, 30, 0), P(12, 4, 12, '#347c42', 0, 34, 0), P(8, 4, 8, '#3a8648', 0, 38, 0), P(4, 4, 4, '#429050', 0, 42, 0)]);
 // -- city
-def('city', 'cone', 'Traffic Cone', 0.1, 6, 0, [P(4, 1, 4, '#e86a1c'), P(3, 2, 3, '#ff7a2a', 0, 1, 0), P(1, 2, 1, '#ff7a2a', 0, 3, 0), P(3, 0.5, 3, '#f4f4f4', 0, 2, 0)]);
-def('city', 'hydrant', 'Hydrant', 0.12, 3, 0, [P(3, 4, 3, '#d6443c'), P(4, 1, 4, '#b8332b', 0, 4, 0), P(1, 2, 5, '#d6443c', 0, 2, 0)]);
-def('city', 'bin', 'Wheelie Bin', 0.14, 3, 0, [P(4, 5, 4, '#4a6a5a'), P(5, 1, 5, '#3a5448', 0, 5, 0)]);
-def('city', 'lamp', 'Street Lamp', 0.2, 2.5, 0, [P(1, 14, 1, '#4a4f5c'), P(4, 1, 1, '#4a4f5c', -1.5, 13, 0), P(3, 1, 2, '#fff2a8', -3, 12, 0)]);
+def('city', 'pigeon', 'Pigeon', 0.08, 4, 0, [P(3, 2, 4, '#8a93a3'), P(2, 2, 2, '#6a7383', 0, 2, -2), P(1, 1, 1, '#f2a33a', 0, 2, -3.5), P(2, 1, 2, '#6a7383', 0, 2, 2.5)], { walk: 0.35 });
+def('city', 'cone', 'Traffic Cone', 0.1, 9, 0, [P(4, 1, 4, '#e86a1c'), P(3, 2, 3, '#ff7a2a', 0, 1, 0), P(1, 2, 1, '#ff7a2a', 0, 3, 0), P(3, 0.5, 3, '#f4f4f4', 0, 2, 0)]);
+def('city', 'hydrant', 'Hydrant', 0.12, 4.5, 0, [P(3, 4, 3, '#d6443c'), P(4, 1, 4, '#b8332b', 0, 4, 0), P(1, 2, 5, '#d6443c', 0, 2, 0)]);
+def('city', 'bin', 'Wheelie Bin', 0.14, 4.5, 0, [P(4, 5, 4, '#4a6a5a'), P(5, 1, 5, '#3a5448', 0, 5, 0)]);
+def('city', 'lamp', 'Street Lamp', 0.2, 3.5, 0, [P(1, 14, 1, '#4a4f5c'), P(4, 1, 1, '#4a4f5c', -1.5, 13, 0), P(3, 1, 2, '#fff2a8', -3, 12, 0)]);
 def('city', 'phonebox', 'Phone Box', 0.3, 0.6, 0, [P(4, 9, 4, '#d6443c'), P(3, 4, 4.2, GLASS, 0, 3, 0), P(4.2, 4, 3, GLASS, 0, 3, 0)]);
 def('city', 'citybench', 'Park Bench', 0.4, 1.2, 0, [P(8, 1, 3, '#7a6a52', 0, 2, 0), P(8, 3, 1, '#7a6a52', 0, 3, -1), P(1, 2, 3, '#3a3f4d', -3, 0, 0), P(1, 2, 3, '#3a3f4d', 3, 0, 0)]);
 def('city', 'busstop', 'Bus Stop', 0.8, 0.5, 0, [P(8, 1, 4, '#3d6fd1', 0, 7, 0), P(1, 7, 1, '#4a4f5c', -3.5, 0, 0), P(1, 7, 1, '#4a4f5c', 3.5, 0, 0), P(6, 1, 2, '#7a5a3a', 0, 2, 0), P(8, 5, 0.5, GLASS, 0, 2, -1.8)]);
@@ -402,7 +425,7 @@ function fmtLen(m) {                                              // a length fo
 }
 
 return {
-  D0, R0, MAXLV, REACH, G, C0, EAT_MAX, SPAWN_CLEAR, MAXXP, CUM,
+  D0, R0, MAXLV, REACH, CURVE, C0, EAT_MAX, SPAWN_CLEAR, MAXXP, CUM,
   scaleAt, tierOf, tierRange, cellSize, setSeed, getSeed, hash, rng,
   need, progress, radiusAt, xpFor, canEat, swallowDist,
   BIOMES, biomeAt, grid, groundColour, ROADW, polar,
@@ -419,7 +442,7 @@ const W = WORLD;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
-const BUILD = '8969c069';   // version: tools/build.js fills in a fingerprint of the game code
+const BUILD = '54814f54';   // version: tools/build.js fills in a fingerprint of the game code
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ------------------------------------------------------------------ settings
@@ -477,7 +500,7 @@ const postMat = new THREE.ShaderMaterial({
         float far = (max(max(dl,dr), max(du,dd)) - dc) * uRange;
         float edge = step(uEdge, lap) * step(uEdge * 1.4, far);
         if (dc >= 0.99999) edge = 0.0;
-        col = mix(col, col*0.28 + vec3(0.03,0.02,0.06), edge*0.9);
+        col = mix(col, col*0.5 + vec3(0.02,0.015,0.04), edge*0.75);
       }
       vec2 c = vUv - 0.5; col *= 1.0 - 0.5*dot(c,c);
       if (uLevels < 200.0) {
@@ -512,8 +535,8 @@ function applyLook() {
 
 // ------------------------------------------------------------------ materials
 // Everything is lit flat (boxes), with colours as written. Two touches go into the shaders. The ground has the hole cut
-// out of it (a round gap with a darker rim). Standing things lose every other pixel where they would hide the hole, so
-// the hole can always be seen behind a tall building.
+// out of it (a round gap with a darker rim). The upper parts of tall things lose a quarter of their pixels where they would hide
+// the hole, so the hole can be seen behind a tall building; things low enough to eat are never touched.
 const UN = {
   uHoleW: { value: new THREE.Vector3() }, uHoleR: { value: 1 },
   uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uView: { value: new THREE.Vector3(0, 0, 1) },
@@ -534,9 +557,9 @@ const groundMat = new THREE.MeshLambertMaterial();
 hook(groundMat, 'float dh = length(vWP.xz - uHoleW.xz); if (dh < uHoleR) discard;', 'if (dh < uHoleR * 1.12) gl_FragColor.rgb *= 0.55;');
 const thingMat = new THREE.MeshLambertMaterial({ vertexColors: true });
 hook(thingMat, `vec3 dp = vWP - uHoleW;
-  if (dot(dp, uView) > 0.35 * uHoleR && vWP.y > 0.02 * uHoleR) {
-    float qx = dot(dp, uRight) / (1.45 * uHoleR), qy = dot(dp, uUp) / (1.45 * uHoleR * uSinEl + 0.001);
-    if (qx*qx + qy*qy < 1.0 && mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 1.0) discard;
+  if (dot(dp, uView) > 0.35 * uHoleR && vWP.y > 1.6 * uHoleR) {
+    float qx = dot(dp, uRight) / (1.3 * uHoleR), qy = dot(dp, uUp) / (1.3 * uHoleR * uSinEl + 0.001);
+    if (qx*qx + qy*qy < 1.0 && mod(floor(gl_FragCoord.x), 2.0) < 1.0 && mod(floor(gl_FragCoord.y), 2.0) < 1.0) discard;
   }`, '');
 
 // ------------------------------------------------------------------ the hole
@@ -546,13 +569,13 @@ const H = { x: 0, z: 0, r: W.R0, rt: W.R0, xp: 0, level: 1, frac: 0, eaten: 0, v
 const pitGeo = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true);
 pitGeo.translate(0, -0.5, 0);
 {
-  const pos = pitGeo.attributes.position, cols = [], top = new THREE.Color('#2e2250'), bot = new THREE.Color('#000000'), c = new THREE.Color();
+  const pos = pitGeo.attributes.position, cols = [], top = new THREE.Color('#5a4a8c'), bot = new THREE.Color('#150e2a'), c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) { c.copy(top).lerp(bot, clamp(-pos.getY(i), 0, 1)); cols.push(c.r, c.g, c.b); }
   pitGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
 }
 const pit = new THREE.Group();
 pit.add(new THREE.Mesh(pitGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-const pitFloor = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+const pitFloor = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0c0818 }));
 pitFloor.position.y = -1;
 pit.add(pitFloor);
 scene.add(pit);
@@ -617,9 +640,9 @@ const POOLS = [];
 const pool = ty => POOLS[ty] || (POOLS[ty] = new Pool(ty));
 
 // ------------------------------------------------------------------ the ground
-// A field of flat tiles round the hole. A tile is about as wide as the hole, so the ground looks coarse and chunky at
-// every size. Tiles keep their place in the field as it moves, and only the ones that come into view are rewritten.
-const TILE_MAX = 90;
+// A field of flat tiles round the hole. A tile is about three quarters as wide as the hole, so the ground looks
+// the same at every size. Tiles keep their place in the field as it moves, and only the ones that come into view are rewritten.
+const TILE_MAX = 100;
 const tileMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), groundMat, TILE_MAX * TILE_MAX);
 tileMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(TILE_MAX * TILE_MAX * 3), 3);
 tileMesh.frustumCulled = false; tileMesh.count = 0;
@@ -627,8 +650,8 @@ scene.add(tileMesh);
 const tkI = new Int32Array(TILE_MAX * TILE_MAX), tkJ = new Int32Array(TILE_MAX * TILE_MAX);
 let tileSize = 0, tileN = 0;
 function updateGround() {
-  const r = H.r, size = Math.pow(2, Math.round(Math.log2(r * 1.5)));
-  const n = Math.min(TILE_MAX, Math.ceil(2 * 28 * r / size) + 2);
+  const r = H.r, size = Math.pow(2, Math.round(Math.log2(r * 0.75)));
+  const n = Math.min(TILE_MAX, Math.ceil(2 * 24 * r / size) + 2);
   const force = size !== tileSize || n !== tileN;
   if (force) { tileSize = size; tileN = n; tkI.fill(2147483647); tkJ.fill(2147483647); tileMesh.count = n * n; }
   const i0 = Math.floor(H.x / size) - (n >> 1), j0 = Math.floor(H.z / size) - (n >> 1);
@@ -719,6 +742,32 @@ function fallStep(dt) {
   }
 }
 
+// ------------------------------------------------------------------ animals
+// Animals near the hole wander: they walk a little, stop, turn and go again, always inside their own cell. They are
+// moved here, a frame at a time, only while the hole is near; far away they stand where the map put them.
+const WALK = W.TYPES.map(t => t.walk);
+function wander(dt, now) {
+  const R = 22 * H.r;
+  for (const c of CELLS.values()) {
+    if (Math.abs(c.x0 + c.C / 2 - H.x) > R + c.C / 2 || Math.abs(c.z0 + c.C / 2 - H.z) > R + c.C / 2) continue;
+    for (const o of c.objs) {
+      const w = WALK[o.ty];
+      if (!w || o.state) continue;
+      if (o.mt === undefined) { o.mt = Math.random() * 3; o.mh = Math.random() * 6.283; o.mv = Math.random() < 0.6; o.mp = Math.random() * 6.283; o.my = 0; }
+      o.mt -= dt;
+      if (o.mt <= 0) { o.mv = !o.mv; o.mt = o.mv ? 1 + Math.random() * 3 : 0.8 + Math.random() * 2.5; if (o.mv) o.mh += (Math.random() - 0.5) * 3; }
+      if (!o.mv) { if (o.my !== 0) { o.my = 0; _q.setFromAxisAngle(Y, o.yaw); POOLS[o.ty].put(o.slot, o.x, 0, o.z, _q, o.s); } continue; }
+      const sp = w * o.s * dt, dx = Math.cos(o.mh), dz = Math.sin(o.mh);
+      let x = o.x + dx * sp, z = o.z + dz * sp;
+      const lo = c.x0 + o.r, hi = c.x0 + c.C - o.r, lz = c.z0 + o.r, hz = c.z0 + c.C - o.r;
+      if (x < lo || x > hi || z < lz || z > hz) { o.mh += Math.PI; x = Math.min(Math.max(x, lo), hi); z = Math.min(Math.max(z, lz), hz); }
+      o.x = x; o.z = z; o.yaw = Math.atan2(-dx, -dz);
+      o.my = 0.12 * o.r * Math.abs(Math.sin(now * 0.012 + o.mp)) + 1e-9;   // a little hop at each step
+      _q.setFromAxisAngle(Y, o.yaw); POOLS[o.ty].put(o.slot, x, o.my, z, _q, o.s);
+    }
+  }
+}
+
 // ------------------------------------------------------------------ levels
 let toastTimer = 0;
 function toast(msg, secs = 1.8) { const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), secs * 1000); }
@@ -800,7 +849,7 @@ function steer() {                                                // a push on t
   }
   return [0, 0];
 }
-const SPEED = 5.5;                                                // hole radii a second
+const SPEED = 6.5;                                                // hole radii a second
 // A hole far too small for where it is (everything there is huge) would take hours to walk home, so it is given the
 // speed of a hole a quarter of the size the place suits.
 const speedRef = () => Math.max(H.r, 0.25 * W.R0 * W.scaleAt(Math.hypot(H.x, H.z)));
@@ -842,7 +891,7 @@ function updateCamera(dt, snap) {
   UN.uRight.value.copy(_right); UN.uUp.value.copy(_up); UN.uView.value.copy(_view);
   UN.uHoleW.value.set(H.x, 0, H.z); UN.uHoleR.value = H.r;
   postMat.uniforms.uRange.value = camera.far - camera.near;
-  postMat.uniforms.uEdge.value = 0.06 * H.r;
+  postMat.uniforms.uEdge.value = 0.1 * H.r;
   pit.position.set(H.x, 0, H.z); pit.scale.set(H.r, 14 * H.r, H.r);
   for (const m of [ringA, ringB]) { m.position.set(H.x, 0.01 * H.r, H.z); m.scale.setScalar(H.r); }
 }
@@ -966,7 +1015,7 @@ function frame(now) {
     H.r += (H.rt - H.r) * Math.min(1, dt * 6);
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
-    eatStep(); fallStep(dt); if (state === 'play') lostCheck(dt);
+    wander(dt, now); eatStep(); fallStep(dt); if (state === 'play') lostCheck(dt);
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
@@ -982,6 +1031,7 @@ function frame(now) {
 
 // ------------------------------------------------------------------ for the tests
 window.__rh = {
+  wanderOnce(dt) { wander(dt, performance.now()); },
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
   start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,

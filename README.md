@@ -7,7 +7,7 @@ Part of the same family as Retro Rack (pool) and Retro Set (chess): the same pix
 ## Playing
 
 - **Steer:** move the mouse (the hole follows the pointer), or WASD, or the arrow keys. On a phone or tablet, touch and drag.
-- **Eat:** anything smaller than your hole falls in. Things bigger than you stay where they are, and you pass under them.
+- **Eat:** anything smaller than your hole falls in. Things bigger than you stay where they are, and you pass under them. Animals wander about, so you may have to chase them.
 - **Grow:** each thing eaten fills the bar. Level up and the hole gets wider.
 - **Go further out** for bigger things. Close to the start everything is small. The area name and your distance from the start are top right.
 - **Lost?** Open the menu (Esc, or the Menu button) and choose Return to Start. It keeps your size.

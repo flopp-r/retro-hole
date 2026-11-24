@@ -3,7 +3,7 @@
 // sweeps the ground steadily. It is an estimate of a steady, efficient player: real play has pauses, wrong turns and
 // fights, so real times are longer. Run:  node tools/sim-pace.js [efficiency, default 0.6]
 const W = require('../src/world.js');
-const eff = +process.argv[2] || 0.6, SPEED = 5.5;       // SPEED: hole radii per second (also in game.js)
+const eff = +process.argv[2] || 0.6, SPEED = 6.5;       // SPEED: hole radii per second (also in game.js)
 const levels = [1, 5, 10, 25, 50, 75, 100, 150, 200, 300, 400, 500, 650, 800, 1000];
 let cumMin = 0, last = 1;
 const rows = [];
