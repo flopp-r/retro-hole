@@ -79,7 +79,17 @@ ok(cut.objs.length < full.objs.length && cut.objs.every(o => o.r >= 1.0 && fullK
 const start = W.genCell(0, 0, 0, 0);
 const edible = start.objs.filter(o => W.canEat(o.r, W.R0)).length;
 ok(edible > 40, 'the first cell has plenty a level 1 hole can eat (' + edible + ')');
-ok(start.objs.every(o => o.r < 1.0), 'the first cell has nothing big');
+// the four cells round the start: bigger things in sight at once (out of reach of a level 1 hole), some of them within a
+// few levels' reach, and nothing enormous
+const round = [[0, 0], [-1, 0], [0, -1], [-1, -1]].flatMap(([i, j]) => W.genCell(0, i, j, 0).objs);
+const nextUp = round.filter(o => !W.canEat(o.r, W.R0) && W.canEat(o.r, W.radiusAt(12, 0))).length, houses = round.filter(o => o.r >= 1.8).length;
+ok(nextUp >= 10, 'round the start there are plenty of things just too big for level 1 that a level 12 hole can eat (' + nextUp + ')');
+ok(houses >= 2, 'round the start there are houses in sight (' + houses + ')');
+ok(round.every(o => o.r < 6), 'round the start nothing is enormous');
+ok(round.length > 500, 'the start has more than 500 things within 32 m (' + round.length + ')');
+ok(round.filter(o => W.TYPES[o.ty].walk).length >= 20, 'and plenty of animals to wander (' + round.filter(o => W.TYPES[o.ty].walk).length + ')');
+// the hole's size grows quickly early: about 5 times wider by level 70 and 8 by 100
+ok(W.radiusAt(10, 0) / W.R0 > 1.5 && W.radiusAt(100, 0) / W.R0 > 7 && W.radiusAt(100, 0) / W.R0 < 10, 'the hole is 1.5 times wider by level 10 and 7 to 10 times by level 100 (' + (W.radiusAt(10, 0) / W.R0).toFixed(2) + ', ' + (W.radiusAt(100, 0) / W.R0).toFixed(1) + ')');
 // further out is bigger
 const nearMax = Math.max(...W.genCell(0, 0, 0).objs.map(o => o.r)), farMax = Math.max(...W.genCell(5, 3, 1).objs.map(o => o.r));
 ok(farMax > nearMax * 10, 'things are much bigger far out (' + nearMax.toFixed(2) + ' m against ' + farMax.toFixed(0) + ' m)');

@@ -20,6 +20,16 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
   ok((await p.textContent('#wArea')).trim() === 'Village' && (await p.textContent('#wDist')).includes('At the start'), 'the HUD names the area and where you are');
   ok(await p.evaluate(() => !document.querySelector('#ver').offsetParent), 'the version is hidden in a game');
 
+  // animals wander about, and stay inside their own cells
+  const walkers = () => p.evaluate(() => { const a = []; for (const c of __rh.CELLS.values()) for (const o of c.objs) if (__rh.W.TYPES[o.ty].walk && !o.state) a.push({ k: c.key + ':' + o.ty + ':' + o.slot, x: o.x, z: o.z, inside: o.x >= c.x0 + o.r - 1e-6 && o.x <= c.x0 + c.C - o.r + 1e-6 && o.z >= c.z0 + o.r - 1e-6 && o.z <= c.z0 + c.C - o.r + 1e-6 }); return a; });
+  const a0 = await walkers(); await frames(p, 80); const a1 = await walkers();
+  const was = new Map(a0.map(o => [o.k, o]));
+  const moved = a1.filter(o => was.has(o.k) && Math.hypot(o.x - was.get(o.k).x, o.z - was.get(o.k).z) > 0.01).length;
+  ok(a0.length >= 15, 'there are animals near the start (' + a0.length + ')');
+  ok(moved >= 5, 'animals wander about (' + moved + ' of ' + a0.length + ' moved)');
+  ok(a1.every(o => o.inside), 'and they stay inside their cells');
+  ok(await p.evaluate(() => __rh.poolSlots() === __rh.standing() + __rh.FALL.length), 'moving animals keep the drawn copies in step');
+
   // steering with the keyboard: right on the screen is +x and -z
   const pos = () => p.evaluate(() => ({ x: __rh.H.x, z: __rh.H.z }));
   const p0 = await pos();
@@ -42,14 +52,14 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
   ok(Math.hypot(idle2.x - idle.x, idle2.z - idle.z) < 0.3, 'a pointer at the middle holds still');
 
   // eating: put the hole on the nearest thing it can swallow
-  const before = await p.evaluate(() => { const n = __rh.nearestEdible(); __rh.teleport(n.x, n.z); return { n, standing: __rh.standing(), xp: __rh.H.xp, r: __rh.H.r }; });
+  const before = await p.evaluate(() => { const n = __rh.nearestEdible(); for (const c of __rh.CELLS.values()) for (const o of c.objs) if (o.x === n.x && o.z === n.z) window.__thing = o; __rh.teleport(n.x, n.z); return { n, standing: __rh.standing(), xp: __rh.H.xp, r: __rh.H.r }; });
   await frames(p, 4);
   const mid = await p.evaluate(() => ({ falling: __rh.FALL.length, eaten: __rh.H.eaten }));
   ok(mid.falling >= 1 && mid.eaten >= 1, 'a thing over the hole starts to fall (' + before.n.type + ')');
   await p.screenshot({ path: shot('falling.png') });
   await frames(p, 40);
   const after = await p.evaluate(() => ({ falling: __rh.FALL.length, standing: __rh.standing(), xp: __rh.H.xp, r: __rh.H.rt, eaten: __rh.H.eaten, slots: __rh.poolSlots() }));
-  ok(after.falling === 0 && after.standing < before.standing, 'the thing is gone once it has fallen');
+  ok(after.falling === 0 && await p.evaluate(() => window.__thing.state === 2), 'the thing is gone once it has fallen');
   ok(after.xp > before.xp && after.r >= before.r, 'eating gives xp and the hole grows');
   ok((await p.textContent('#lvEaten')).includes('Eaten ' + after.eaten), 'the HUD counts what has been eaten');
   ok(after.slots === after.standing, 'every standing thing has exactly one drawn copy (' + after.slots + ')');

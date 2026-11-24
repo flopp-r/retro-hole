@@ -64,7 +64,7 @@ const postMat = new THREE.ShaderMaterial({
         float far = (max(max(dl,dr), max(du,dd)) - dc) * uRange;
         float edge = step(uEdge, lap) * step(uEdge * 1.4, far);
         if (dc >= 0.99999) edge = 0.0;
-        col = mix(col, col*0.28 + vec3(0.03,0.02,0.06), edge*0.9);
+        col = mix(col, col*0.5 + vec3(0.02,0.015,0.04), edge*0.75);
       }
       vec2 c = vUv - 0.5; col *= 1.0 - 0.5*dot(c,c);
       if (uLevels < 200.0) {
@@ -99,8 +99,8 @@ function applyLook() {
 
 // ------------------------------------------------------------------ materials
 // Everything is lit flat (boxes), with colours as written. Two touches go into the shaders. The ground has the hole cut
-// out of it (a round gap with a darker rim). Standing things lose every other pixel where they would hide the hole, so
-// the hole can always be seen behind a tall building.
+// out of it (a round gap with a darker rim). The upper parts of tall things lose a quarter of their pixels where they would hide
+// the hole, so the hole can be seen behind a tall building; things low enough to eat are never touched.
 const UN = {
   uHoleW: { value: new THREE.Vector3() }, uHoleR: { value: 1 },
   uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uView: { value: new THREE.Vector3(0, 0, 1) },
@@ -121,9 +121,9 @@ const groundMat = new THREE.MeshLambertMaterial();
 hook(groundMat, 'float dh = length(vWP.xz - uHoleW.xz); if (dh < uHoleR) discard;', 'if (dh < uHoleR * 1.12) gl_FragColor.rgb *= 0.55;');
 const thingMat = new THREE.MeshLambertMaterial({ vertexColors: true });
 hook(thingMat, `vec3 dp = vWP - uHoleW;
-  if (dot(dp, uView) > 0.35 * uHoleR && vWP.y > 0.02 * uHoleR) {
-    float qx = dot(dp, uRight) / (1.45 * uHoleR), qy = dot(dp, uUp) / (1.45 * uHoleR * uSinEl + 0.001);
-    if (qx*qx + qy*qy < 1.0 && mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 1.0) discard;
+  if (dot(dp, uView) > 0.35 * uHoleR && vWP.y > 1.6 * uHoleR) {
+    float qx = dot(dp, uRight) / (1.3 * uHoleR), qy = dot(dp, uUp) / (1.3 * uHoleR * uSinEl + 0.001);
+    if (qx*qx + qy*qy < 1.0 && mod(floor(gl_FragCoord.x), 2.0) < 1.0 && mod(floor(gl_FragCoord.y), 2.0) < 1.0) discard;
   }`, '');
 
 // ------------------------------------------------------------------ the hole
@@ -133,13 +133,13 @@ const H = { x: 0, z: 0, r: W.R0, rt: W.R0, xp: 0, level: 1, frac: 0, eaten: 0, v
 const pitGeo = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true);
 pitGeo.translate(0, -0.5, 0);
 {
-  const pos = pitGeo.attributes.position, cols = [], top = new THREE.Color('#2e2250'), bot = new THREE.Color('#000000'), c = new THREE.Color();
+  const pos = pitGeo.attributes.position, cols = [], top = new THREE.Color('#5a4a8c'), bot = new THREE.Color('#150e2a'), c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) { c.copy(top).lerp(bot, clamp(-pos.getY(i), 0, 1)); cols.push(c.r, c.g, c.b); }
   pitGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
 }
 const pit = new THREE.Group();
 pit.add(new THREE.Mesh(pitGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-const pitFloor = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+const pitFloor = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0c0818 }));
 pitFloor.position.y = -1;
 pit.add(pitFloor);
 scene.add(pit);
@@ -204,9 +204,9 @@ const POOLS = [];
 const pool = ty => POOLS[ty] || (POOLS[ty] = new Pool(ty));
 
 // ------------------------------------------------------------------ the ground
-// A field of flat tiles round the hole. A tile is about as wide as the hole, so the ground looks coarse and chunky at
-// every size. Tiles keep their place in the field as it moves, and only the ones that come into view are rewritten.
-const TILE_MAX = 90;
+// A field of flat tiles round the hole. A tile is about three quarters as wide as the hole, so the ground looks
+// the same at every size. Tiles keep their place in the field as it moves, and only the ones that come into view are rewritten.
+const TILE_MAX = 100;
 const tileMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), groundMat, TILE_MAX * TILE_MAX);
 tileMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(TILE_MAX * TILE_MAX * 3), 3);
 tileMesh.frustumCulled = false; tileMesh.count = 0;
@@ -214,8 +214,8 @@ scene.add(tileMesh);
 const tkI = new Int32Array(TILE_MAX * TILE_MAX), tkJ = new Int32Array(TILE_MAX * TILE_MAX);
 let tileSize = 0, tileN = 0;
 function updateGround() {
-  const r = H.r, size = Math.pow(2, Math.round(Math.log2(r * 1.5)));
-  const n = Math.min(TILE_MAX, Math.ceil(2 * 28 * r / size) + 2);
+  const r = H.r, size = Math.pow(2, Math.round(Math.log2(r * 0.75)));
+  const n = Math.min(TILE_MAX, Math.ceil(2 * 24 * r / size) + 2);
   const force = size !== tileSize || n !== tileN;
   if (force) { tileSize = size; tileN = n; tkI.fill(2147483647); tkJ.fill(2147483647); tileMesh.count = n * n; }
   const i0 = Math.floor(H.x / size) - (n >> 1), j0 = Math.floor(H.z / size) - (n >> 1);
@@ -306,6 +306,32 @@ function fallStep(dt) {
   }
 }
 
+// ------------------------------------------------------------------ animals
+// Animals near the hole wander: they walk a little, stop, turn and go again, always inside their own cell. They are
+// moved here, a frame at a time, only while the hole is near; far away they stand where the map put them.
+const WALK = W.TYPES.map(t => t.walk);
+function wander(dt, now) {
+  const R = 22 * H.r;
+  for (const c of CELLS.values()) {
+    if (Math.abs(c.x0 + c.C / 2 - H.x) > R + c.C / 2 || Math.abs(c.z0 + c.C / 2 - H.z) > R + c.C / 2) continue;
+    for (const o of c.objs) {
+      const w = WALK[o.ty];
+      if (!w || o.state) continue;
+      if (o.mt === undefined) { o.mt = Math.random() * 3; o.mh = Math.random() * 6.283; o.mv = Math.random() < 0.6; o.mp = Math.random() * 6.283; o.my = 0; }
+      o.mt -= dt;
+      if (o.mt <= 0) { o.mv = !o.mv; o.mt = o.mv ? 1 + Math.random() * 3 : 0.8 + Math.random() * 2.5; if (o.mv) o.mh += (Math.random() - 0.5) * 3; }
+      if (!o.mv) { if (o.my !== 0) { o.my = 0; _q.setFromAxisAngle(Y, o.yaw); POOLS[o.ty].put(o.slot, o.x, 0, o.z, _q, o.s); } continue; }
+      const sp = w * o.s * dt, dx = Math.cos(o.mh), dz = Math.sin(o.mh);
+      let x = o.x + dx * sp, z = o.z + dz * sp;
+      const lo = c.x0 + o.r, hi = c.x0 + c.C - o.r, lz = c.z0 + o.r, hz = c.z0 + c.C - o.r;
+      if (x < lo || x > hi || z < lz || z > hz) { o.mh += Math.PI; x = Math.min(Math.max(x, lo), hi); z = Math.min(Math.max(z, lz), hz); }
+      o.x = x; o.z = z; o.yaw = Math.atan2(-dx, -dz);
+      o.my = 0.12 * o.r * Math.abs(Math.sin(now * 0.012 + o.mp)) + 1e-9;   // a little hop at each step
+      _q.setFromAxisAngle(Y, o.yaw); POOLS[o.ty].put(o.slot, x, o.my, z, _q, o.s);
+    }
+  }
+}
+
 // ------------------------------------------------------------------ levels
 let toastTimer = 0;
 function toast(msg, secs = 1.8) { const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), secs * 1000); }
@@ -387,7 +413,7 @@ function steer() {                                                // a push on t
   }
   return [0, 0];
 }
-const SPEED = 5.5;                                                // hole radii a second
+const SPEED = 6.5;                                                // hole radii a second
 // A hole far too small for where it is (everything there is huge) would take hours to walk home, so it is given the
 // speed of a hole a quarter of the size the place suits.
 const speedRef = () => Math.max(H.r, 0.25 * W.R0 * W.scaleAt(Math.hypot(H.x, H.z)));
@@ -429,7 +455,7 @@ function updateCamera(dt, snap) {
   UN.uRight.value.copy(_right); UN.uUp.value.copy(_up); UN.uView.value.copy(_view);
   UN.uHoleW.value.set(H.x, 0, H.z); UN.uHoleR.value = H.r;
   postMat.uniforms.uRange.value = camera.far - camera.near;
-  postMat.uniforms.uEdge.value = 0.06 * H.r;
+  postMat.uniforms.uEdge.value = 0.1 * H.r;
   pit.position.set(H.x, 0, H.z); pit.scale.set(H.r, 14 * H.r, H.r);
   for (const m of [ringA, ringB]) { m.position.set(H.x, 0.01 * H.r, H.z); m.scale.setScalar(H.r); }
 }
@@ -553,7 +579,7 @@ function frame(now) {
     H.r += (H.rt - H.r) * Math.min(1, dt * 6);
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
-    eatStep(); fallStep(dt); if (state === 'play') lostCheck(dt);
+    wander(dt, now); eatStep(); fallStep(dt); if (state === 'play') lostCheck(dt);
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
@@ -569,6 +595,7 @@ function frame(now) {
 
 // ------------------------------------------------------------------ for the tests
 window.__rh = {
+  wanderOnce(dt) { wander(dt, performance.now()); },
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
   start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
