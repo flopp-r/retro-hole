@@ -33,11 +33,15 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #xpBar{height:12px;margin-top:6px;background:var(--ink);border:3px solid var(--ink);outline:2px solid var(--plum2)}
 #xpFill{display:block;height:100%;width:0;background:var(--mint)}
 #lvSub{display:flex;justify-content:space-between;margin-top:5px;font-size:19px;opacity:.85}
+#lvSub2{display:flex;justify-content:space-between;margin-top:1px;font-size:19px;opacity:.85}
+#lvCoins{color:var(--lamp)}
+#coinPop{left:calc(max(14px,env(safe-area-inset-left)) + min(300px,52vw) + 8px);top:calc(max(12px,env(safe-area-inset-top)) + 70px);font-family:'Press Start 2P',monospace;font-size:12px;color:var(--lamp);text-shadow:2px 2px 0 var(--ink);white-space:nowrap;opacity:0;transition:opacity .3s}
+#coinPop.on{opacity:1}
 #top{right:max(14px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 #top .btn{pointer-events:auto}
 #where{padding:6px 10px;font-size:20px;text-align:right;line-height:1.1}
 #where b{font-weight:400;color:var(--lamp)}
-#board{left:max(14px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 106px);padding:6px 10px;font-size:19px;line-height:1.05;min-width:150px;opacity:.92}
+#board{left:max(14px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 130px);padding:6px 10px;font-size:19px;line-height:1.05;min-width:150px;opacity:.92}
 #board .you{color:var(--lamp)}
 #labels{position:absolute;inset:0;overflow:hidden}
 .botLabel{position:absolute;transform:translate(-50%,-100%);padding:1px 5px;font-size:18px;line-height:1;white-space:nowrap;background:rgba(13,10,28,.72);border:2px solid var(--ink);text-shadow:1px 1px 0 var(--ink)}
@@ -58,6 +62,21 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #titleBtns{display:grid;grid-template-columns:1fr;gap:10px;min-width:260px}
 #how{font-size:20px;opacity:.85;max-width:44ch}
 #ver{position:fixed;left:0;right:0;bottom:6px;text-align:center;font-size:17px;opacity:.55}
+#skins .ovPanel{width:min(760px,96vw);max-height:calc(100vh - 44px);gap:8px}
+#skHead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+#skHead h2{margin:0}
+#skCoins{font-size:22px;color:var(--lamp)}
+#skGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;overflow:auto;min-height:0;touch-action:pan-y;padding:2px}
+.skCard{display:flex;gap:10px;align-items:center;padding:6px 8px;background:var(--night);border:3px solid var(--plum2)}
+.skCard canvas{width:56px;height:56px;flex:none;image-rendering:pixelated;background:#0d0a1c}
+.skInfo{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0}
+.skName{font-size:21px;line-height:1}
+.skRar{font-size:17px;opacity:.9}
+.skCard .btn{font-size:8px;padding:5px 8px}
+.skCard .btn:disabled{opacity:.45;cursor:default}
+#skStats{display:grid;grid-template-columns:1fr 1fr;gap:8px;overflow:auto;min-height:0;touch-action:pan-y}
+#skStats .skCard{flex-direction:column;align-items:flex-start;gap:2px;font-size:20px}
+#skStats b{font-weight:400;color:var(--lamp)}
 #pause{background:rgba(13,10,28,.55)}
 .ovPanel{width:min(420px,94vw);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
 .ovPanel h2{margin:0 0 4px;font-family:'Press Start 2P',monospace;font-weight:400;font-size:13px;color:var(--lamp)}
@@ -68,7 +87,8 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 .seg .btn{font-size:9px;padding:7px 9px}
 .note{font-size:18px;opacity:.75}
 @media (max-width:560px){.row{grid-template-columns:1fr}}
-@media (max-height:420px){#titleBtns{grid-template-columns:1fr 1fr;min-width:0}#how{display:none}#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px;max-width:none}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
+@media (max-width:420px){#lvl{width:50vw}#where{font-size:18px;padding:5px 8px}}
+@media (max-height:420px){#skins .ovPanel{padding:10px 12px}.skCard canvas{width:44px;height:44px}.skName{font-size:19px}#titleBtns{grid-template-columns:1fr 1fr;min-width:0}#how{display:none}#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px;max-width:none}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
 </style>
 </head>
 <body>
@@ -79,7 +99,9 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <div id="lvTop"><span id="lvNum">Level 1</span><span id="lvSize">1.0 m</span></div>
     <div id="xpBar"><i id="xpFill"></i></div>
     <div id="lvSub"><span id="lvEaten">Eaten 0</span><span id="lvNext"></span></div>
+    <div id="lvSub2"><span id="lvKD">Kills 0 / Deaths 0</span><span id="lvCoins">0 coins</span></div>
   </div>
+  <div id="coinPop"></div>
   <div id="top">
     <button id="bMenu" class="btn" type="button">Menu</button>
     <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span><span id="wMode" hidden><br>Quick Mode</span></div>
@@ -101,6 +123,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
       <button id="bQuick" class="btn" type="button">Quick Game</button>
       <button id="bQuickNew" class="btn" type="button" hidden>New Quick Game</button>
       <button id="bSet" class="btn" type="button">Settings</button>
+      <button id="bSkins" class="btn" type="button">Skins</button>
     </div>
     <div id="how">Steer with the mouse, WASD or the arrow keys, or touch and drag. Press M to turn mouse steering off. Eat anything smaller than your hole.<br>Quick Game: everything is one size everywhere and you grow extremely fast, with no level cap.</div>
   </div>
@@ -111,6 +134,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <h2>Menu</h2>
     <button id="bResume" class="btn main" type="button">Resume</button>
     <button id="bHome" class="btn" type="button">Return to Start</button>
+    <button id="bSkins2" class="btn" type="button">Skins</button>
     <button id="bSet2" class="btn" type="button">Settings</button>
     <button id="bQuit" class="btn" type="button">Quit to Title</button>
   </div>
@@ -122,6 +146,15 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <div id="setRows"></div>
     <div class="note">Fewer pixels and fewer colours suit slower devices.</div>
     <button id="bSetClose" class="btn main" type="button">Close</button>
+  </div>
+</div>
+<div id="skins" class="overlay" hidden>
+  <div class="ovPanel panel">
+    <div id="skHead"><h2>Skins</h2><span id="skCoins"></span></div>
+    <div id="skTabs" class="seg"></div>
+    <div id="skGrid"></div>
+    <div id="skStats" hidden></div>
+    <button id="bSkinsClose" class="btn main" type="button">Close</button>
   </div>
 </div>
 <div id="ver"></div>
@@ -415,6 +448,9 @@ def('volcano', 'volcanocone', 'Volcano', 6.0, 840, [P(44, 6, 44, '#3a3438'), P(3
 def('volcano', 'charredtree', 'Charred Tree', 0.8, 0, [P(2, 10, 2, '#1a1618'), P(6, 1, 1, '#1a1618', 0, 7, 0), P(1, 1, 5, '#1a1618', 0, 5, 0), P(1, 1, 1, GLOW, 3, 8, 0), P(1, 1, 1, GLOW, 0, 6, 2.5)]);
 def('volcano', 'smokestack', 'Smokestack', 1.0, 0, [P(6, 14, 6, '#3a3438'), P(4, 3, 4, ASH, 0, 14, 0), P(3, 4, 3, '#6a6a72', 0, 17, 0)]);
 def('volcano', 'anvil', 'Anvil', 0.2, 0, [P(4, 2, 3, '#2a2a33'), P(6, 1, 3, '#2a2a33', 0, 2, 0), P(2, 1, 2, '#2a2a33', -3, 2, 0)]);
+
+// -- coins: a few in every plot, put down after the layout so nothing else moves; a hole swallowing one is paid (see COINS)
+def('all', 'coin', 'Gold Coin', 0.14, 0, [P(5, 5, 1.2, '#c98f12'), P(3.4, 3.4, 1.6, '#ffd84a', 0, 0.8, 0), P(1.2, 1.2, 2, '#fff2a8', 0, 1.8, 0)]);
 
 TYPES.sort((a, b) => b.b - a.b);                                  // biggest first: they are placed first, the small fill the gaps
 TYPES.forEach((t, i) => { t.i = i; });
@@ -1123,12 +1159,28 @@ function botSpec(c) {
   return { id: c.key, x, z, r: R0 * botScale(d) * m, name: BOT_NAMES[Math.floor(pn * BOT_NAMES.length)], colour: BOT_COLOURS[Math.floor(pc * BOT_COLOURS.length)], aggr: 0.4 + 0.6 * pa };
 }
 
+// ------------------------------------------------------------------ coins
+// What a hole earns. A level pays 1 coin plus 1 for every 5 levels, so higher levels pay more; Quick Game's levels come
+// about 100 times faster, so there a level pays 1/100 of that. A coin on the map pays 5 plus 5 times the square root of
+// the hole's size level (10 coins for a new hole, 55 at level 100), a tenth of it in Quick Game (there the hole passes a coin every second or so while small). A bot
+// swallowed pays 5 plus its own size level, less each time the same bot is swallowed again (it comes back after 25 s).
+// "Size level" is the normal-game level of a hole that wide (`sizeLevel`), so Quick Game's big holes pay by size.
+const COINS = { PER100: 0.16, LEVEL_EVERY: 5, QUICK_LEVEL: 0.01, QUICK_FOUND: 0.1, KILL: 5 };
+const sizeLevel = r => r <= R0 ? 1 : Math.min(1000, 1 + Math.floor(Math.pow(Math.log(r / R0) / Math.log(REACH), 1 / CURVE) * 999 + 1e-6));
+const levelPay = level => (1 + Math.floor(level / COINS.LEVEL_EVERY)) * (quick() ? COINS.QUICK_LEVEL : 1);
+const foundPay = holeR => (5 + 5 * Math.floor(Math.sqrt(sizeLevel(holeR)))) * (quick() ? COINS.QUICK_FOUND : 1);
+const killPay = (victimR, timesBefore = 0) => (COINS.KILL + sizeLevel(victimR)) / (1 + timesBefore);
+
 // ------------------------------------------------------------------ making a cell
 // A cell is made from the seed alone, so it is the same each time it is made. cull: leave out things smaller than
 // this radius (they would be specks next to the hole); the rest are exactly as they would be without it.
 function genCell(t, i, j, cull = 0) {
   const c = cellInfo(t, i, j), ctx = makeCtx(c, cull);
   LAYOUTS[c.biome][c.kind](ctx);
+  {                                                                  // coins go last, so every other thing stands exactly where it did; the plots are full, so each coin tries many places
+    const rn = rng(hash(SEED, c.t, c.i, c.j, 4242)), ci = c.inner, want = COINS.PER100 * DENSITY / 100 * (ci.x1 - ci.x0) * (ci.z1 - ci.z0) / (ctx.Sc * ctx.Sc), n = Math.floor(want + rn());
+    for (let k = 0; k < n; k++) for (let tries = 0; tries < 60; tries++) if (ctx.add('coin', ci.x0 + rn() * (ci.x1 - ci.x0), ci.z0 + rn() * (ci.z1 - ci.z0), {}, rn)) break;
+  }
   const objs = ctx.objs.filter(o => !o.ghost);
   let maxR = 0;
   for (const o of objs) if (o.r > maxR) maxR = o.r;
@@ -1179,6 +1231,7 @@ return {
   D0, R0, REACH, CURVE, C0, EAT_MAX, SPAWN_CLEAR, CUM, cum, QUICK, botScale, setMode, getMode,
   get MAXLV() { return maxLv(); }, get MAXXP() { return maxXp(); },
   scaleAt, tierOf, tierRange, cellSize, setSeed, getSeed, hash, rng,
+  COINS, sizeLevel, levelPay, foundPay, killPay,
   need, progress, radiusAt, xpFor, xpForRadius, canEat, swallowDist, BOT_NAMES, BOT_COLOURS, botSpec,
   BIOMES, STYLES, FACE, LANE, yawOf, biomeAt, cellInfo, cellAt, groundColour, polar, LAYOUTS,
   TYPES, BIGGEST, BYID, byId, model, genCell, wantedCells, fmtLen,
@@ -1186,15 +1239,106 @@ return {
 })();
 if (typeof module !== 'undefined') module.exports = WORLD;
 
+// ------------------------------------------------------------------ skins, eating effects and the wallet
+// No screen and no three.js here (it also runs in Node, for the tests): the catalogue of hole skins and eating effects,
+// their prices, and the saved profile (coins, what is owned and worn, kills and deaths for good).
+const SKINS_MOD = (() => {
+const RARITY = {                                                  // the colour of a card, and the name shown
+  common: { name: 'Common', colour: '#c9ced8' }, uncommon: { name: 'Uncommon', colour: '#7dffb0' }, rare: { name: 'Rare', colour: '#6cb8ff' },
+  epic: { name: 'Epic', colour: '#c79bff' }, legendary: { name: 'Legendary', colour: '#ffc56b' },
+};
+const PRICE = { common: 150, uncommon: 400, rare: 1000, epic: 2500, legendary: 6000 };
+// A skin: the ring's colours and how they are laid round it (pattern), the pit's two colours (top, bottom), and spin
+// (radians a second, for the epic and legendary ones). Patterns: solid, stripes (every 3rd segment of 48), halves,
+// thirds, checker (every segment), dash (long colour, short dark gap) and gradient (the colours blend round the ring).
+const PIT = { c: ['#5a4a8c', '#150e2a'] };
+const sk = (id, name, rarity, ring, pattern, pit, spin = 0) => ({ id, name, rarity, price: id === 'classic' ? 0 : PRICE[rarity], ring, pattern, pit: pit || PIT.c, spin });
+const SKINS = [
+  sk('classic', 'Classic', 'common', ['#fff0b0'], 'solid'),
+  sk('mint', 'Mint', 'common', ['#7dffb0'], 'solid', ['#2f6a55', '#0a2a22']),
+  sk('sky', 'Sky', 'common', ['#6cb8ff'], 'solid', ['#2f5a8c', '#0a1a33']),
+  sk('rose', 'Rose', 'common', ['#ff6f8f'], 'solid', ['#8c2f4a', '#33101c']),
+  sk('tangerine', 'Tangerine', 'common', ['#ffa040'], 'solid', ['#8c5a2f', '#331c0a']),
+  sk('lilac', 'Lilac', 'common', ['#c79bff'], 'solid', ['#5a3a8c', '#1a0e33']),
+  sk('slate', 'Slate', 'common', ['#c9ced8'], 'solid', ['#4a4f5c', '#14161c']),
+  sk('candy', 'Candy Stripe', 'uncommon', ['#ff6f8f', '#ffffff'], 'stripes', ['#8c2f4a', '#33101c']),
+  sk('bee', 'Bee', 'uncommon', ['#ffd34d', '#1a1433'], 'stripes', ['#8c7a2f', '#2a2208']),
+  sk('ocean', 'Ocean', 'uncommon', ['#6cb8ff', '#ffffff'], 'halves', ['#2f5a8c', '#0a1a33']),
+  sk('meadow', 'Meadow', 'uncommon', ['#3f9a3c', '#a8d36a'], 'checker', ['#2f6a2f', '#0a2a0a']),
+  sk('sunset', 'Sunset', 'uncommon', ['#ff6f8f', '#ffc56b'], 'halves', ['#8c3a4a', '#331018']),
+  sk('zebra', 'Zebra', 'uncommon', ['#ffffff', '#2a2a33'], 'checker', ['#4a4f5c', '#0d0a1c']),
+  sk('tricolour', 'Tricolour', 'rare', ['#ff4a5a', '#ffffff', '#3a6fd1'], 'thirds', ['#4a4f8c', '#0d0a2c']),
+  sk('lava', 'Lava', 'rare', ['#ff4a1c', '#ffb03a', '#7a1010'], 'stripes', ['#8c2f10', '#330a00']),
+  sk('frost', 'Frost', 'rare', ['#bfe8ff', '#6cb8ff'], 'dash', ['#3a6a8c', '#0a1a2a']),
+  sk('toxic', 'Toxic', 'rare', ['#b8ff3a', '#1a1433'], 'dash', ['#4a8c1a', '#102a05']),
+  sk('royal', 'Royal', 'rare', ['#7a4ad1', '#ffd34d'], 'halves', ['#4a2a8c', '#150a33']),
+  sk('ember', 'Ember', 'epic', ['#ff4a1c', '#ffd34d'], 'checker', ['#8c2f10', '#2a0a00'], 0.8),
+  sk('galaxy', 'Galaxy', 'epic', ['#1a1433', '#7a4ad1', '#6cb8ff', '#ffffff'], 'stripes', ['#2a1a5a', '#05020f'], 0.8),
+  sk('gold', 'Gold', 'epic', ['#ffd34d', '#fff2a8', '#c98f12'], 'stripes', ['#8c6a1a', '#2a1c05'], 0.8),
+  sk('rainbow', 'Rainbow', 'epic', ['#ff4a5a', '#ffa040', '#ffd34d', '#7dffb0', '#6cb8ff', '#c79bff'], 'gradient', null, 0.8),
+  sk('void', 'Void', 'legendary', ['#0d0a1c', '#7a4ad1'], 'dash', ['#1a0e33', '#000000'], 1.6),
+  sk('prism', 'Prism', 'legendary', ['#ff4a5a', '#ffa040', '#ffd34d', '#7dffb0', '#6cb8ff', '#c79bff'], 'checker', ['#5a4a8c', '#0a0618'], 1.6),
+  sk('sun', 'Sun', 'legendary', ['#ffd34d', '#ff8a3a', '#fff2a8'], 'thirds', ['#8c4a1a', '#2a1005'], 1.6),
+];
+// An eating effect: little coloured cubes thrown up when a thing falls in. All sizes and speeds are in hole radii
+// (so it looks the same at every level): n bits a thing, speed sideways, up (and `g` the pull of gravity; negative
+// floats), life in seconds, size.
+const fxe = (id, name, rarity, bits, n, speed, up, g, life, size) => ({ id, name, rarity, price: id === 'none' ? 0 : { common: 300, uncommon: 300, rare: 800, epic: 2000, legendary: 4000 }[rarity], bits, n, speed, up, g, life, size });
+const EFFECTS = [
+  fxe('none', 'None', 'common', ['#ffffff'], 0, 0, 0, 0, 0, 0),
+  fxe('sparkle', 'Sparkle', 'common', ['#fff2a8', '#ffffff', '#ffd34d'], 5, 1.1, 1.3, 4, 0.55, 0.22),
+  fxe('smoke', 'Smoke', 'uncommon', ['#8a8f9a', '#c9ced8', '#5a5f6c'], 4, 0.5, 1.2, -1, 0.9, 0.4),
+  fxe('confetti', 'Confetti', 'rare', ['#ff6f8f', '#6cb8ff', '#ffd34d', '#7dffb0', '#c79bff'], 7, 1.5, 1.5, 5, 0.8, 0.26),
+  fxe('embers', 'Embers', 'rare', ['#ff4a1c', '#ffb03a', '#ffd34d'], 6, 0.7, 1.4, -0.8, 0.9, 0.2),
+  fxe('stars', 'Stars', 'epic', ['#ffffff', '#ffd34d'], 6, 1.2, 1.8, 3.5, 0.8, 0.32),
+  fxe('burst', 'Rainbow Burst', 'legendary', ['#ff4a5a', '#ffa040', '#ffd34d', '#7dffb0', '#6cb8ff', '#c79bff'], 12, 1.9, 2.0, 5, 0.9, 0.28),
+];
+const KINDS = { skin: SKINS, fx: EFFECTS };
+const find = (kind, id) => (Object.prototype.hasOwnProperty.call(KINDS, kind) ? KINDS[kind] : []).find(x => x.id === id) || null;
+
+// The saved profile: coins (may hold fractions; shown rounded down), what is owned and worn, kills and deaths for good.
+// stats are kept for each game, since Quick Game and the normal game are separate.
+const blankStats = () => ({ normal: { kills: 0, deaths: 0 }, quick: { kills: 0, deaths: 0 } });
+const fresh = () => ({ v: 1, coins: 0, owned: { skin: ['classic'], fx: ['none'] }, wear: { skin: 'classic', fx: 'none' }, stats: blankStats() });
+const num = (x, max = 1e12) => typeof x === 'number' && isFinite(x) && x >= 0 ? Math.min(x, max) : 0;
+function validate(raw) {                                          // a clean profile from anything that was saved
+  const p = fresh();
+  if (!raw || typeof raw !== 'object') return p;
+  p.coins = Math.round(num(raw.coins) * 100) / 100;
+  for (const k of Object.keys(KINDS)) {
+    const own = raw.owned && Array.isArray(raw.owned[k]) ? raw.owned[k] : [];
+    for (const id of own) if (typeof id === 'string' && find(k, id) && !p.owned[k].includes(id)) p.owned[k].push(id);
+    const w = raw.wear && raw.wear[k];
+    if (typeof w === 'string' && p.owned[k].includes(w)) p.wear[k] = w;
+  }
+  for (const m of ['normal', 'quick']) { const s = raw.stats && raw.stats[m]; if (s) { p.stats[m].kills = Math.floor(num(s.kills, 1e9)); p.stats[m].deaths = Math.floor(num(s.deaths, 1e9)); } }
+  return p;
+}
+const owns = (p, kind, id) => p.owned[kind].includes(id);
+function buy(p, kind, id) {                                       // spends the coins and puts it on; false (nothing changed) if unknown, owned or too dear
+  const it = find(kind, id);
+  if (!it || owns(p, kind, id) || p.coins < it.price) return false;
+  p.coins = Math.round((p.coins - it.price) * 100) / 100; p.owned[kind].push(id); p.wear[kind] = id;
+  return true;
+}
+function wear(p, kind, id) { if (!find(kind, id) || !owns(p, kind, id)) return false; p.wear[kind] = id; return true; }
+const earn = (p, n) => { if (n > 0 && isFinite(n)) p.coins = Math.round(Math.min(p.coins + n, 1e12) * 100) / 100; };
+const kd = s => s.deaths ? s.kills / s.deaths : s.kills;          // kills for each death (with no deaths, just the kills)
+const total = p => SKINS.length + EFFECTS.length - 2;             // what can be bought (the two free ones excluded)
+const cost = () => [...SKINS, ...EFFECTS].reduce((a, x) => a + x.price, 0);
+return { RARITY, PRICE, SKINS, EFFECTS, KINDS, find, fresh, validate, owns, buy, wear, earn, kd, total, cost };
+})();
+if (typeof module !== 'undefined') module.exports = SKINS_MOD;
+
 // Retro Hole in the browser: drawing the world, the hole, eating, input, the camera and the screens. The rules and the
 // map are in world.js (W here); this file only shows them and asks them.
 (() => {
 'use strict';
-const W = WORLD;
+const W = WORLD, K = SKINS_MOD;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
-const BUILD = '19690998';   // version: tools/build.js fills in a fingerprint of the game code
+const BUILD = '096f2553';   // version: tools/build.js fills in a fingerprint of the game code
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ------------------------------------------------------------------ settings
@@ -1209,6 +1353,18 @@ if (![256, 32, 16, 8].includes(S.levels)) S.levels = DEFAULTS.levels;
 if (!(S.volume >= 0 && S.volume <= 1)) S.volume = DEFAULTS.volume;
 if (typeof S.mouse !== 'boolean') S.mouse = DEFAULTS.mouse;
 const saveS = () => { try { localStorage.setItem('retroHole.settings', JSON.stringify(S)); } catch (e) {} };
+
+// ------------------------------------------------------------------ the profile
+// Coins, the skins and effects owned and worn, and kills and deaths for good, kept in the browser (retroHole.profile).
+// Coins are earned by levels, kills and coins found on the map (world.js, COINS) and spent on the Skins screen.
+let PROFILE = K.fresh();
+try { PROFILE = K.validate(JSON.parse(localStorage.getItem('retroHole.profile') || 'null')); } catch (e) {}
+let profileDirty = false;
+function saveProfile() { profileDirty = false; try { localStorage.setItem('retroHole.profile', JSON.stringify(PROFILE)); } catch (e) {} }
+let popSum = 0, popT = 0;
+function earnCoins(n) { if (!(n > 0)) return; K.earn(PROFILE, n); profileDirty = true; popSum += n; popT = 1.6; }
+const coinText = n => n >= 10 ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
+const stat = () => PROFILE.stats[MODE];                          // this game's kills and deaths for good
 
 // ------------------------------------------------------------------ renderer + post
 // The scene is drawn small into a render target; a shader then adds outlines where the depth jumps, a vignette and, below
@@ -1317,7 +1473,7 @@ thingMat.onBeforeCompile = sh => {
 // ------------------------------------------------------------------ the hole
 // A round gap in the ground (see the ground's shader), a dark pit under it that things fall into, and a ring drawn over
 // everything so the hole is never lost.
-const H = { x: 0, z: 0, r: W.R0, rt: W.R0, xp: 0, level: 1, frac: 0, eaten: 0, vx: 0, vz: 0, prot: 0 };
+const H = { x: 0, z: 0, r: W.R0, rt: W.R0, xp: 0, level: 1, frac: 0, eaten: 0, vx: 0, vz: 0, prot: 0, kills: 0, deaths: 0, best: 1 };
 const pitGeo = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true);
 pitGeo.translate(0, -0.5, 0);
 {
@@ -1329,21 +1485,50 @@ const pitMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.Bac
 const floorGeo = new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), floorMat = new THREE.MeshBasicMaterial({ color: 0x0c0818 });
 const ringGeoA = new THREE.RingGeometry(1.0, 1.1, 48).rotateX(-Math.PI / 2), ringGeoB = new THREE.RingGeometry(1.1, 1.2, 48).rotateX(-Math.PI / 2);
 const darkRing = new THREE.MeshBasicMaterial({ color: 0x1a1433, depthTest: false, depthWrite: false });
-function makeVisual(hex) {                                        // a pit under the ground, and a coloured ring over everything
+// The player's own ring and pit have their own geometry, coloured by the skin worn (applySkin): the ring cut into 48
+// flat triangles pairs coloured one by one, the pit's colours from its top to its floor.
+const RING_SEG = 48;
+const ringSkinGeo = new THREE.RingGeometry(1.0, 1.25, RING_SEG).rotateX(-Math.PI / 2).toNonIndexed(), pitSkinGeo = pitGeo.clone();   // wider than a bot's ring, so the pattern shows
+ringSkinGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(ringSkinGeo.attributes.position.count * 3).fill(1), 3));
+const ringSegOf = [];                                             // for each triangle, which of the 48 segments it is in
+{ const pos = ringSkinGeo.attributes.position; for (let i = 0; i < pos.count; i += 3) { const x = (pos.getX(i) + pos.getX(i + 1) + pos.getX(i + 2)) / 3, z = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3; ringSegOf.push(Math.floor((Math.atan2(z, x) / (2 * Math.PI) + 1) % 1 * RING_SEG)); } }
+const _c1 = new THREE.Color(), _c2 = new THREE.Color();
+function ringColour(skin, k, out) {                               // the colour of segment k of the ring
+  const c = skin.ring, n = c.length;
+  switch (skin.pattern) {
+    case 'stripes': return out.set(c[Math.floor(k / 3) % n]);
+    case 'halves': return out.set(c[Math.floor(k / (RING_SEG / n)) % n]);
+    case 'thirds': return out.set(c[Math.floor(k / (RING_SEG / Math.min(n, 3))) % n]);
+    case 'checker': return out.set(c[k % n]);
+    case 'dash': return out.set(c[k % 4 === 3 ? 1 % n : 0]);
+    case 'gradient': { const u = k / RING_SEG * n, i = Math.floor(u); return out.set(c[i % n]).lerp(_c2.set(c[(i + 1) % n]), u - i); }
+    default: return out.set(c[0]);
+  }
+}
+function applySkin() {
+  const s = K.find('skin', PROFILE.wear.skin) || K.SKINS[0], col = ringSkinGeo.attributes.color;
+  for (let t = 0; t < ringSegOf.length; t++) { ringColour(s, ringSegOf[t], _c1); for (let v = 0; v < 3; v++) col.setXYZ(t * 3 + v, _c1.r, _c1.g, _c1.b); }
+  col.needsUpdate = true;
+  const pos = pitSkinGeo.attributes.position, pc = [], top = new THREE.Color(s.pit[0]), bot = new THREE.Color(s.pit[1]), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) { c.copy(top).lerp(bot, clamp(-pos.getY(i), 0, 1)); pc.push(c.r, c.g, c.b); }
+  pitSkinGeo.setAttribute('color', new THREE.Float32BufferAttribute(pc, 3));
+}
+function makeVisual(hex, own = false) {                           // a pit under the ground, and a coloured ring over everything
   const pit = new THREE.Group(), floor = new THREE.Mesh(floorGeo, floorMat);
-  pit.add(new THREE.Mesh(pitGeo, pitMat)); floor.position.y = -1; pit.add(floor);
-  const mat = new THREE.MeshBasicMaterial({ color: hex, depthTest: false, depthWrite: false });
-  const a = new THREE.Mesh(ringGeoA, mat), b = new THREE.Mesh(ringGeoB, darkRing);
+  pit.add(new THREE.Mesh(own ? pitSkinGeo : pitGeo, pitMat)); floor.position.y = -1; pit.add(floor);
+  const mat = new THREE.MeshBasicMaterial({ color: hex, depthTest: false, depthWrite: false, vertexColors: own });
+  const a = new THREE.Mesh(own ? ringSkinGeo : ringGeoA, mat), b = new THREE.Mesh(ringGeoB, darkRing);
   for (const m of [a, b]) { m.renderOrder = 5; m.frustumCulled = false; }
   scene.add(pit, a, b);
-  return { pit, a, b, mat };
+  return { pit, a, b, mat, own };
 }
-const VIS = [makeVisual(0xfff1b0)];                               // 0 is the player's; the bots' are added as they are needed
+const VIS = [makeVisual(0xffffff, true)];                               // 0 is the player's; the bots' are added as they are needed
+applySkin();
 function placeVisual(v, x, z, r, show) {
   v.pit.visible = v.a.visible = v.b.visible = show;
   if (!show) return;
   v.pit.position.set(x, 0, z); v.pit.scale.set(r, 14 * r, r);
-  for (const m of [v.a, v.b]) { m.position.set(x, 0.01 * r, z); m.scale.setScalar(r); }
+  for (const m of [v.a, v.b]) { m.position.set(x, 0.01 * r, z); m.scale.setScalar(m === v.b && v.own ? 1.14 * r : r); }   // the player's dark outline sits outside its wider ring
 }
 
 // ------------------------------------------------------------------ standing things
@@ -1495,11 +1680,51 @@ function clearWorld() {
 // towards the middle, and is gone when it is below the ground.
 const FALL = [];
 let lastEatSound = 0;
+const COIN_TY = W.BYID.coin.i;
+// Eating effects: little cubes thrown up where a thing falls in, in the colours of the effect worn (skins.js). They are
+// sized by the hole's radius so they look the same at every level, and there are none with reduced motion.
+const BITS_MAX = 240, BITS = Array.from({ length: BITS_MAX }, () => ({ life: 0 }));
+const bitMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), BITS_MAX);
+bitMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bitMesh.frustumCulled = false; bitMesh.visible = false; bitMesh.renderOrder = 4;
+for (let i = 0; i < BITS_MAX; i++) bitMesh.setColorAt(i, _c.set(0xffffff));
+scene.add(bitMesh);
+let bitHead = 0, bitsLive = 0, fxBudget = 0;
+function spawnBits(x, z) {
+  const fx = K.find('fx', PROFILE.wear.fx);
+  if (!fx || !fx.n || reduceMotion || fxBudget >= 6) return;
+  fxBudget++;
+  for (let k = 0; k < fx.n; k++) {
+    const b = BITS[bitHead]; bitHead = (bitHead + 1) % BITS_MAX;
+    const a = Math.random() * 6.2832, sp = fx.speed * H.r * (0.4 + Math.random() * 0.8);
+    b.x = x; b.y = 0.15 * H.r; b.z = z; b.vx = Math.cos(a) * sp; b.vz = Math.sin(a) * sp; b.vy = fx.up * H.r * (0.6 + Math.random() * 0.8); b.g = fx.g * H.r;
+    b.max = b.life = fx.life * (0.7 + Math.random() * 0.6); b.size = fx.size * H.r;
+    bitMesh.setColorAt(BITS.indexOf(b), _c.set(fx.bits[Math.floor(Math.random() * fx.bits.length)]));
+  }
+  bitMesh.instanceColor.needsUpdate = true;
+}
+function clearBits() { for (const b of BITS) b.life = 0; bitsLive = 0; bitMesh.visible = false; }
+function bitsStep(dt) {
+  fxBudget = 0;
+  if (!bitsLive && !BITS.some(b => b.life > 0)) { bitMesh.visible = false; return; }
+  let live = 0;
+  for (let i = 0; i < BITS_MAX; i++) {
+    const b = BITS[i];
+    if (b.life > 0) {
+      b.life -= dt; b.x += b.vx * dt; b.z += b.vz * dt; b.vy -= b.g * dt; b.y = Math.max(0, b.y + b.vy * dt);
+      if (b.y === 0 && b.g > 0) b.vy = 0;
+    }
+    if (b.life > 0) { live++; const s = b.size * (0.35 + 0.65 * b.life / b.max); _m.makeScale(s, s, s); _m.setPosition(b.x, b.y + s / 2, b.z); }
+    else _m.makeScale(0, 0, 0);
+    bitMesh.setMatrixAt(i, _m);
+  }
+  bitMesh.instanceMatrix.needsUpdate = true; bitsLive = live; bitMesh.visible = live > 0;
+}
 function startFall(o, c, h) {
   o.state = 1;
   const f = { o, c, h, sx: o.x, sz: o.z, t: 0, T: clamp(0.35 + 0.22 * Math.sqrt(o.h / h.r), 0.35, 1.4), tilt: (Math.random() < 0.5 ? -1 : 1) * (0.35 + 0.5 * Math.random()) };
   o.fall = f; FALL.push(f);
-  if (h === H) gain(W.xpFor(o.r, H.r), o.r / H.r); else botGain(h, W.xpFor(o.r, h.r) * BOT_XP);
+  if (h === H) { gain(W.xpFor(o.r, H.r), o.r / H.r); if (state === 'play') { if (o.ty === COIN_TY) earnCoins(W.foundPay(H.r)); spawnBits(o.x, o.z); } }
+  else botGain(h, W.xpFor(o.r, h.r) * BOT_XP);
 }
 function dropFall(o) { const i = FALL.indexOf(o.fall); if (i >= 0) { FALL[i] = FALL[FALL.length - 1]; FALL.pop(); } o.fall = null; }
 function eatFor(h) {                                              // the player's hole and every bot eat by the same rule
@@ -1674,11 +1899,17 @@ function duels() {                                                // one hole sw
 }
 function swallowHole(a, b) {
   const xp = 3 * W.xpFor(b.r, a.r);
+  const times = b.deaths | 0;                                     // how often this bot has been swallowed before
   if (b === H) killPlayer(a);
-  else { b.alive = false; b.dying = 0.6; b.respawn = RESPAWN; }
-  if (a === H) { gain(xp, 1); toast('You swallowed ' + b.name, 1.8); sfx('bot'); } else botGain(a, xp * BOT_XP);
+  else { b.alive = false; b.dying = 0.6; b.respawn = RESPAWN; b.deaths = times + 1; }
+  if (a === H) {
+    gain(xp, 1); H.kills++; stat().kills++; profileDirty = true;
+    const pay = W.killPay(b.r, times); earnCoins(pay);
+    toast('You swallowed ' + b.name + '  +' + coinText(pay) + ' coins', 1.8); sfx('bot');
+  } else botGain(a, xp * BOT_XP);
 }
 function killPlayer(by) {
+  H.deaths++; stat().deaths++; profileDirty = true;
   setXp(H.xp / 2); H.r = H.rt;
   const ang = Math.atan2(H.z - by.z, H.x - by.x), away = 10 * by.r;
   H.x += Math.cos(ang) * away; H.z += Math.sin(ang) * away; H.vx = H.vz = 0; H.prot = 4;
@@ -1734,6 +1965,7 @@ function gain(xp, rel) {
   H.eaten++;
   const up = setXp(H.xp + xp);
   if (state !== 'play') return;                                   // the title screen's hole plays silently
+  if (H.level > H.best) { let c = 0; for (let L = H.best + 1; L <= H.level && L <= H.best + 3000; L++) c += W.levelPay(L); H.best = H.level; earnCoins(c); }   // only levels you have not reached before pay, so dying and climbing again earns nothing
   const now = performance.now();
   if (now - lastEatSound > 70) { lastEatSound = now; sfx('eat', rel); }
   if (up) { toast(H.level >= W.MAXLV ? 'Level 1,000: maximum!' : 'Level ' + H.level, 1.6); sfx('level'); }
@@ -1784,9 +2016,9 @@ const KEYMAP = { w: 'u', arrowup: 'u', s: 'd', arrowdown: 'd', a: 'l', arrowleft
 addEventListener('keydown', e => {
   ensureAudio();
   const k = e.key.toLowerCase();
-  if (k === 'escape') { e.preventDefault(); if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
+  if (k === 'escape') { e.preventDefault(); if (!$('#skins').hidden) closeSkins(); else if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
   if (KEYMAP[k]) { IN.keys[KEYMAP[k]] = true; if (k.startsWith('arrow')) e.preventDefault(); }
-  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
+  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden && $('#skins').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.key.toLowerCase()]; if (k) IN.keys[k] = false; });
 addEventListener('blur', () => { IN.keys = {}; IN.touch = null; $('#stick').hidden = true; });
@@ -1859,7 +2091,11 @@ function readSave(mode = MODE) {
   } catch (e) {}
   return null;
 }
-function save() { if (state === 'title') return; try { localStorage.setItem(SAVE_KEYS[MODE], JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten })); } catch (e) {} }
+function save() {
+  if (profileDirty) saveProfile();
+  if (state === 'title') return;
+  try { localStorage.setItem(SAVE_KEYS[MODE], JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten, k: H.kills, d: H.deaths, b: H.best })); } catch (e) {}
+}
 const hintsSeen = {};
 function hint(id, text, secs = 7) {
   if (hintsSeen[id]) return; hintsSeen[id] = 1;
@@ -1886,8 +2122,8 @@ function startGame(fresh, mode = 'normal') {
   clearWorld();
   W.setMode(mode); MODE = mode;                                   // the mode is set before any cell is made
   const s = fresh ? null : readSave(mode);
-  Object.assign(H, { x: s ? s.x : 0, z: s ? s.z : 0, vx: 0, vz: 0, eaten: s ? s.eaten | 0 : 0 });
-  setXp(s ? s.xp : 0); H.r = H.rt;
+  Object.assign(H, { x: s ? s.x : 0, z: s ? s.z : 0, vx: 0, vz: 0, eaten: s ? s.eaten | 0 : 0, kills: s ? s.k | 0 : 0, deaths: s ? s.d | 0 : 0 });
+  setXp(s ? s.xp : 0); H.r = H.rt; H.best = Math.max(H.level, s ? s.b | 0 : 0); clearBits(); popT = popSum = 0; $('#coinPop').classList.remove('on');
   state = 'play'; lastHud = ''; IN.mouse = false; H.prot = 8; ACTIVE = []; dyingBots = [];   // a few seconds before bots can swallow you                // the pointer is ignored until it moves, so the click on Play does not steer
   $('#title').hidden = true; $('#pause').hidden = true; $('#hud').hidden = false; $('#ver').hidden = true;
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
@@ -1904,13 +2140,14 @@ function showTitle() {
   clearWorld();
   W.setMode('quick'); const q = readSave('quick'), ql = q ? W.progress(q.xp).level : 0;     // the title shows each game's level
   W.setMode('normal'); MODE = 'normal';                            // and its own world is the normal one
-  Object.assign(H, { x: 0, z: 0, vx: 0, vz: 0, eaten: 0 }); setXp(0); H.r = H.rt; auto = { ang: 0.6 };
+  Object.assign(H, { x: 0, z: 0, vx: 0, vz: 0, eaten: 0, kills: 0, deaths: 0 }); setXp(0); H.r = H.rt; H.best = 1; clearBits(); auto = { ang: 0.6 };
   $('#hud').hidden = true; $('#pause').hidden = true; $('#title').hidden = false; $('#ver').hidden = false;
   const s = readSave();
   $('#bPlay').textContent = s ? 'Continue (Level ' + W.progress(s.xp).level + ')' : 'Play';
   $('#bNew').hidden = !s;
   $('#bQuick').textContent = q ? 'Continue Quick (Level ' + ql.toLocaleString('en-GB') + ')' : 'Quick Game';
   $('#bQuickNew').hidden = !q;
+  $('#bSkins').textContent = 'Skins (' + Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins)';
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
 }
 function openPause() { if (state !== 'play') return; state = 'pause'; save(); $('#pause').hidden = false; IN.touch = null; $('#stick').hidden = true; }
@@ -1941,16 +2178,72 @@ function renderSettings() {
     row.appendChild(seg); box.appendChild(row);
   }
 }
+// ------------------------------------------------------------------ the Skins screen
+// Skins (the hole's ring and pit), Effects (what flies up when something falls in) and Stats. Bought with coins; buying
+// puts it on at once. Opened from the title screen and the menu.
+let skTab = 'skin';
+const kdText = s => (s.deaths ? (s.kills / s.deaths).toFixed(1) : String(s.kills));
+function drawPreview(cv, kind, it) {                              // a small picture of a skin or an effect, a pixel at a time
+  const N = 28, g = cv.getContext('2d'); cv.width = cv.height = N;
+  g.fillStyle = '#0d0a1c'; g.fillRect(0, 0, N, N);
+  if (kind === 'skin') {
+    const top = new THREE.Color(it.pit[0]), bot = new THREE.Color(it.pit[1]), c = new THREE.Color();
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = x + 0.5 - N / 2, dy = y + 0.5 - N / 2, d = Math.hypot(dx, dy);
+      if (d <= 8.5) c.copy(top).lerp(bot, d / 8.5);
+      else if (d <= 12.5) ringColour(it, Math.floor((Math.atan2(dy, dx) / (2 * Math.PI) + 1) % 1 * RING_SEG), c);
+      else continue;
+      g.fillStyle = '#' + c.getHexString(); g.fillRect(x, y, 1, 1);
+    }
+  } else if (it.n) {
+    const spots = [[6, 20], [11, 9], [15, 17], [19, 6], [22, 14], [9, 15], [17, 11], [21, 21], [13, 4], [5, 8], [24, 9], [12, 23]];
+    spots.forEach(([x, y], i) => { g.fillStyle = it.bits[i % it.bits.length]; const s = it.size > 0.25 ? 3 : 2; g.fillRect(x, y, s, s); });
+  } else { g.strokeStyle = '#6a5a8c'; g.lineWidth = 1; g.strokeRect(4.5, 4.5, N - 9, N - 9); g.beginPath(); g.moveTo(6, 22); g.lineTo(22, 6); g.stroke(); }
+}
+function renderSkins() {
+  $('#skCoins').textContent = Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins';
+  const tabs = $('#skTabs'); tabs.textContent = '';
+  for (const [id, label] of [['skin', 'Skins'], ['fx', 'Effects'], ['stats', 'Stats']]) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = label; b.dataset.tab = id; b.setAttribute('aria-pressed', String(skTab === id));
+    b.onclick = () => { skTab = id; renderSkins(); sfx('ui'); }; tabs.appendChild(b);
+  }
+  const grid = $('#skGrid'), stats = $('#skStats'); grid.textContent = ''; stats.textContent = '';
+  grid.hidden = skTab === 'stats'; stats.hidden = skTab !== 'stats';
+  if (skTab === 'stats') {
+    const card = (title, lines) => { const d = document.createElement('div'); d.className = 'skCard'; const h = document.createElement('div'); h.className = 'skName'; h.textContent = title; d.appendChild(h); const r = document.createElement('div'); lines.forEach(([k, v], i) => { if (i) r.append('  '); r.append(k + ' '); const b = document.createElement('b'); b.textContent = v; r.appendChild(b); }); d.appendChild(r); stats.appendChild(d); };
+    for (const [m, label] of [['normal', 'Normal Game'], ['quick', 'Quick Game']]) { const s = PROFILE.stats[m]; card(label, [['Kills', s.kills.toLocaleString('en-GB')], ['Deaths', s.deaths.toLocaleString('en-GB')], ['K/D', kdText(s)]]); }
+    if (state === 'pause') card('This Run', [['Kills', String(H.kills)], ['Deaths', String(H.deaths)], ['K/D', kdText({ kills: H.kills, deaths: H.deaths })]]);
+    card('Collection', [['Skins', PROFILE.owned.skin.length + ' of ' + K.SKINS.length], ['Effects', PROFILE.owned.fx.length + ' of ' + K.EFFECTS.length]]);
+    return;
+  }
+  for (const it of K.KINDS[skTab]) {
+    const owned = K.owns(PROFILE, skTab, it.id), worn = PROFILE.wear[skTab] === it.id, rar = K.RARITY[it.rarity];
+    const card = document.createElement('div'); card.className = 'skCard'; card.dataset.id = it.id; card.style.borderColor = rar.colour;
+    const cv = document.createElement('canvas'); drawPreview(cv, skTab, it);
+    const info = document.createElement('div'); info.className = 'skInfo';
+    const nm = document.createElement('div'); nm.className = 'skName'; nm.textContent = it.name;
+    const rr = document.createElement('div'); rr.className = 'skRar'; rr.textContent = rar.name; rr.style.color = rar.colour;
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn';
+    if (worn) { b.textContent = 'Worn'; b.setAttribute('aria-pressed', 'true'); }
+    else if (owned) { b.textContent = 'Wear'; b.onclick = () => { K.wear(PROFILE, skTab, it.id); saveProfile(); applySkin(); renderSkins(); sfx('ui'); }; }
+    else { b.textContent = 'Buy ' + it.price.toLocaleString('en-GB'); b.disabled = PROFILE.coins < it.price; b.onclick = () => { if (K.buy(PROFILE, skTab, it.id)) { saveProfile(); applySkin(); renderSkins(); sfx('level'); } }; }
+    info.append(nm, rr, b); card.append(cv, info); grid.appendChild(card);
+  }
+}
+function openSkins() { $('#skins').hidden = false; renderSkins(); }
+function closeSkins() { $('#skins').hidden = true; if (state === 'title') showTitleLabels(); }
+function showTitleLabels() { $('#bSkins').textContent = 'Skins (' + Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins)'; }
 $('#bPlay').onclick = () => startGame(false);
 $('#bNew').onclick = () => startGame(true);
 $('#bQuick').onclick = () => startGame(false, 'quick');
 $('#bQuickNew').onclick = () => startGame(true, 'quick');
+$('#bSkins').onclick = $('#bSkins2').onclick = openSkins; $('#bSkinsClose').onclick = closeSkins;
 $('#bSet').onclick = openSettings; $('#bSet2').onclick = openSettings; $('#bSetClose').onclick = closeSettings;
 $('#bMenu').onclick = openPause; $('#bResume').onclick = closePause;
 $('#bQuit').onclick = showTitle; $('#bHome').onclick = returnToStart;
 document.addEventListener('visibilitychange', () => { if (document.hidden) { save(); if (state === 'play') openPause(); } });
 addEventListener('pagehide', save);
-addEventListener('resize', resize);
+addEventListener('resize', () => { resize(); lastHud = ''; });
 $('#ver').textContent = 'Version ' + BUILD;
 
 // ------------------------------------------------------------------ the screen's numbers
@@ -1958,12 +2251,15 @@ let lastHud = '';
 function hud() {
   if (state === 'title') return;
   const p = H.level >= W.MAXLV ? 1 : H.frac, d = Math.hypot(H.x, H.z), b = W.BIOMES[W.biomeAt(H.x, H.z)].name;
-  const key = [H.level, Math.round(p * 500), H.eaten, Math.round(H.r * 100), Math.round(d), b].join();
+  const key = [H.level, Math.round(p * 500), H.eaten, Math.round(H.r * 100), Math.round(d), b, H.kills, H.deaths, Math.floor(PROFILE.coins)].join();
   if (key === lastHud) return; lastHud = key;
   $('#lvNum').textContent = 'Level ' + H.level.toLocaleString('en-GB');
   $('#lvSize').textContent = W.fmtLen(H.r * 2) + ' wide';
   $('#xpFill').style.width = (p * 100).toFixed(1) + '%';
   $('#lvEaten').textContent = 'Eaten ' + H.eaten.toLocaleString('en-GB');
+  $('#lvKD').textContent = 'Kills ' + H.kills.toLocaleString('en-GB') + ' / Deaths ' + H.deaths.toLocaleString('en-GB');
+  $('#lvCoins').textContent = Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins';
+  { const l = $('#lvl'); $('#board').style.top = (l.offsetTop + l.offsetHeight + 8) + 'px'; }   // the scoreboard sits under the level panel, whatever height that has (on a narrow screen the kills line wraps)
   $('#lvNext').textContent = H.level >= W.MAXLV ? 'MAX' : Math.round(p * 100) + '%';
   $('#wArea').textContent = b; $('#wDist').textContent = d < 1 ? 'At the start' : W.fmtLen(d) + ' from start';
 }
@@ -1979,13 +2275,15 @@ function frame(now) {
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
     H.prot = Math.max(0, H.prot - dt);
-    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play' && MODE !== 'quick') lostCheck(dt);
+    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); bitsStep(dt); if (state === 'play' && MODE !== 'quick') lostCheck(dt);
+    if (popT > 0) { popT -= dt; $('#coinPop').textContent = '+' + coinText(popSum); $('#coinPop').classList.toggle('on', popT > 0); if (popT <= 0) popSum = 0; }
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
   for (const p of POOLS) if (p) p.flush();
   const pulse = 0.5 + 0.5 * Math.sin(now / 260);
-  VIS[0].mat.color.setRGB(1, 0.9 + 0.1 * pulse, 0.55 + 0.3 * pulse);
+  { const br = 0.88 + 0.12 * pulse; VIS[0].mat.color.setRGB(br, br, br); }
+  { const sp = (K.find('skin', PROFILE.wear.skin) || K.SKINS[0]).spin; if (sp && !reduceMotion) VIS[0].a.rotation.y += sp * dt; }
   VIS[0].a.visible = H.prot <= 0 || Math.floor(now / 110) % 2 === 0;   // your ring blinks while you are protected
   hud(); updateLabels(); updateBoard(dt);
   renderer.info.reset();
@@ -1999,7 +2297,7 @@ window.__rh = {
   wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; }, BOTS, get active() { return ACTIVE; }, get dying() { return dyingBots; }, VIS, UN,
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
-  get mode() { return MODE; }, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
+  get mode() { return MODE; }, get profile() { return PROFILE; }, K, openSkins, closeSkins, saveProfile, applySkin, earnCoins, get bits() { return bitsLive; }, spawnBits, COIN_TY, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
   teleport(x, z) { H.x = x; H.z = z; H.vx = H.vz = 0; plan(); makeCells(1000); },
   setXp(xp) { setXp(xp); H.r = H.rt; },
   nearestEdible(re) {                                              // the nearest thing the hole can eat (only types matching re, if given)

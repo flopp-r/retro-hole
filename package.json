@@ -4,7 +4,7 @@
   "description": "Retro Hole: a voxel pixel-art hole game with an endless map",
   "scripts": {
     "build": "node tools/build.js",
-    "test": "node tests/world.test.js",
+    "test": "node tests/world.test.js && node tests/skins.test.js",
     "test:browser": "node tests/browser/run-all.js",
     "icons": "node tools/make-icons.js",
     "sim-pace": "node tools/sim-pace.js"

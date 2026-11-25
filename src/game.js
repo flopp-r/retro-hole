@@ -2,7 +2,7 @@
 // map are in world.js (W here); this file only shows them and asks them.
 (() => {
 'use strict';
-const W = WORLD;
+const W = WORLD, K = SKINS_MOD;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -21,6 +21,18 @@ if (![256, 32, 16, 8].includes(S.levels)) S.levels = DEFAULTS.levels;
 if (!(S.volume >= 0 && S.volume <= 1)) S.volume = DEFAULTS.volume;
 if (typeof S.mouse !== 'boolean') S.mouse = DEFAULTS.mouse;
 const saveS = () => { try { localStorage.setItem('retroHole.settings', JSON.stringify(S)); } catch (e) {} };
+
+// ------------------------------------------------------------------ the profile
+// Coins, the skins and effects owned and worn, and kills and deaths for good, kept in the browser (retroHole.profile).
+// Coins are earned by levels, kills and coins found on the map (world.js, COINS) and spent on the Skins screen.
+let PROFILE = K.fresh();
+try { PROFILE = K.validate(JSON.parse(localStorage.getItem('retroHole.profile') || 'null')); } catch (e) {}
+let profileDirty = false;
+function saveProfile() { profileDirty = false; try { localStorage.setItem('retroHole.profile', JSON.stringify(PROFILE)); } catch (e) {} }
+let popSum = 0, popT = 0;
+function earnCoins(n) { if (!(n > 0)) return; K.earn(PROFILE, n); profileDirty = true; popSum += n; popT = 1.6; }
+const coinText = n => n >= 10 ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
+const stat = () => PROFILE.stats[MODE];                          // this game's kills and deaths for good
 
 // ------------------------------------------------------------------ renderer + post
 // The scene is drawn small into a render target; a shader then adds outlines where the depth jumps, a vignette and, below
@@ -129,7 +141,7 @@ thingMat.onBeforeCompile = sh => {
 // ------------------------------------------------------------------ the hole
 // A round gap in the ground (see the ground's shader), a dark pit under it that things fall into, and a ring drawn over
 // everything so the hole is never lost.
-const H = { x: 0, z: 0, r: W.R0, rt: W.R0, xp: 0, level: 1, frac: 0, eaten: 0, vx: 0, vz: 0, prot: 0 };
+const H = { x: 0, z: 0, r: W.R0, rt: W.R0, xp: 0, level: 1, frac: 0, eaten: 0, vx: 0, vz: 0, prot: 0, kills: 0, deaths: 0, best: 1 };
 const pitGeo = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true);
 pitGeo.translate(0, -0.5, 0);
 {
@@ -141,21 +153,50 @@ const pitMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.Bac
 const floorGeo = new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), floorMat = new THREE.MeshBasicMaterial({ color: 0x0c0818 });
 const ringGeoA = new THREE.RingGeometry(1.0, 1.1, 48).rotateX(-Math.PI / 2), ringGeoB = new THREE.RingGeometry(1.1, 1.2, 48).rotateX(-Math.PI / 2);
 const darkRing = new THREE.MeshBasicMaterial({ color: 0x1a1433, depthTest: false, depthWrite: false });
-function makeVisual(hex) {                                        // a pit under the ground, and a coloured ring over everything
+// The player's own ring and pit have their own geometry, coloured by the skin worn (applySkin): the ring cut into 48
+// flat triangles pairs coloured one by one, the pit's colours from its top to its floor.
+const RING_SEG = 48;
+const ringSkinGeo = new THREE.RingGeometry(1.0, 1.25, RING_SEG).rotateX(-Math.PI / 2).toNonIndexed(), pitSkinGeo = pitGeo.clone();   // wider than a bot's ring, so the pattern shows
+ringSkinGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(ringSkinGeo.attributes.position.count * 3).fill(1), 3));
+const ringSegOf = [];                                             // for each triangle, which of the 48 segments it is in
+{ const pos = ringSkinGeo.attributes.position; for (let i = 0; i < pos.count; i += 3) { const x = (pos.getX(i) + pos.getX(i + 1) + pos.getX(i + 2)) / 3, z = (pos.getZ(i) + pos.getZ(i + 1) + pos.getZ(i + 2)) / 3; ringSegOf.push(Math.floor((Math.atan2(z, x) / (2 * Math.PI) + 1) % 1 * RING_SEG)); } }
+const _c1 = new THREE.Color(), _c2 = new THREE.Color();
+function ringColour(skin, k, out) {                               // the colour of segment k of the ring
+  const c = skin.ring, n = c.length;
+  switch (skin.pattern) {
+    case 'stripes': return out.set(c[Math.floor(k / 3) % n]);
+    case 'halves': return out.set(c[Math.floor(k / (RING_SEG / n)) % n]);
+    case 'thirds': return out.set(c[Math.floor(k / (RING_SEG / Math.min(n, 3))) % n]);
+    case 'checker': return out.set(c[k % n]);
+    case 'dash': return out.set(c[k % 4 === 3 ? 1 % n : 0]);
+    case 'gradient': { const u = k / RING_SEG * n, i = Math.floor(u); return out.set(c[i % n]).lerp(_c2.set(c[(i + 1) % n]), u - i); }
+    default: return out.set(c[0]);
+  }
+}
+function applySkin() {
+  const s = K.find('skin', PROFILE.wear.skin) || K.SKINS[0], col = ringSkinGeo.attributes.color;
+  for (let t = 0; t < ringSegOf.length; t++) { ringColour(s, ringSegOf[t], _c1); for (let v = 0; v < 3; v++) col.setXYZ(t * 3 + v, _c1.r, _c1.g, _c1.b); }
+  col.needsUpdate = true;
+  const pos = pitSkinGeo.attributes.position, pc = [], top = new THREE.Color(s.pit[0]), bot = new THREE.Color(s.pit[1]), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) { c.copy(top).lerp(bot, clamp(-pos.getY(i), 0, 1)); pc.push(c.r, c.g, c.b); }
+  pitSkinGeo.setAttribute('color', new THREE.Float32BufferAttribute(pc, 3));
+}
+function makeVisual(hex, own = false) {                           // a pit under the ground, and a coloured ring over everything
   const pit = new THREE.Group(), floor = new THREE.Mesh(floorGeo, floorMat);
-  pit.add(new THREE.Mesh(pitGeo, pitMat)); floor.position.y = -1; pit.add(floor);
-  const mat = new THREE.MeshBasicMaterial({ color: hex, depthTest: false, depthWrite: false });
-  const a = new THREE.Mesh(ringGeoA, mat), b = new THREE.Mesh(ringGeoB, darkRing);
+  pit.add(new THREE.Mesh(own ? pitSkinGeo : pitGeo, pitMat)); floor.position.y = -1; pit.add(floor);
+  const mat = new THREE.MeshBasicMaterial({ color: hex, depthTest: false, depthWrite: false, vertexColors: own });
+  const a = new THREE.Mesh(own ? ringSkinGeo : ringGeoA, mat), b = new THREE.Mesh(ringGeoB, darkRing);
   for (const m of [a, b]) { m.renderOrder = 5; m.frustumCulled = false; }
   scene.add(pit, a, b);
-  return { pit, a, b, mat };
+  return { pit, a, b, mat, own };
 }
-const VIS = [makeVisual(0xfff1b0)];                               // 0 is the player's; the bots' are added as they are needed
+const VIS = [makeVisual(0xffffff, true)];                               // 0 is the player's; the bots' are added as they are needed
+applySkin();
 function placeVisual(v, x, z, r, show) {
   v.pit.visible = v.a.visible = v.b.visible = show;
   if (!show) return;
   v.pit.position.set(x, 0, z); v.pit.scale.set(r, 14 * r, r);
-  for (const m of [v.a, v.b]) { m.position.set(x, 0.01 * r, z); m.scale.setScalar(r); }
+  for (const m of [v.a, v.b]) { m.position.set(x, 0.01 * r, z); m.scale.setScalar(m === v.b && v.own ? 1.14 * r : r); }   // the player's dark outline sits outside its wider ring
 }
 
 // ------------------------------------------------------------------ standing things
@@ -307,11 +348,51 @@ function clearWorld() {
 // towards the middle, and is gone when it is below the ground.
 const FALL = [];
 let lastEatSound = 0;
+const COIN_TY = W.BYID.coin.i;
+// Eating effects: little cubes thrown up where a thing falls in, in the colours of the effect worn (skins.js). They are
+// sized by the hole's radius so they look the same at every level, and there are none with reduced motion.
+const BITS_MAX = 240, BITS = Array.from({ length: BITS_MAX }, () => ({ life: 0 }));
+const bitMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), BITS_MAX);
+bitMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); bitMesh.frustumCulled = false; bitMesh.visible = false; bitMesh.renderOrder = 4;
+for (let i = 0; i < BITS_MAX; i++) bitMesh.setColorAt(i, _c.set(0xffffff));
+scene.add(bitMesh);
+let bitHead = 0, bitsLive = 0, fxBudget = 0;
+function spawnBits(x, z) {
+  const fx = K.find('fx', PROFILE.wear.fx);
+  if (!fx || !fx.n || reduceMotion || fxBudget >= 6) return;
+  fxBudget++;
+  for (let k = 0; k < fx.n; k++) {
+    const b = BITS[bitHead]; bitHead = (bitHead + 1) % BITS_MAX;
+    const a = Math.random() * 6.2832, sp = fx.speed * H.r * (0.4 + Math.random() * 0.8);
+    b.x = x; b.y = 0.15 * H.r; b.z = z; b.vx = Math.cos(a) * sp; b.vz = Math.sin(a) * sp; b.vy = fx.up * H.r * (0.6 + Math.random() * 0.8); b.g = fx.g * H.r;
+    b.max = b.life = fx.life * (0.7 + Math.random() * 0.6); b.size = fx.size * H.r;
+    bitMesh.setColorAt(BITS.indexOf(b), _c.set(fx.bits[Math.floor(Math.random() * fx.bits.length)]));
+  }
+  bitMesh.instanceColor.needsUpdate = true;
+}
+function clearBits() { for (const b of BITS) b.life = 0; bitsLive = 0; bitMesh.visible = false; }
+function bitsStep(dt) {
+  fxBudget = 0;
+  if (!bitsLive && !BITS.some(b => b.life > 0)) { bitMesh.visible = false; return; }
+  let live = 0;
+  for (let i = 0; i < BITS_MAX; i++) {
+    const b = BITS[i];
+    if (b.life > 0) {
+      b.life -= dt; b.x += b.vx * dt; b.z += b.vz * dt; b.vy -= b.g * dt; b.y = Math.max(0, b.y + b.vy * dt);
+      if (b.y === 0 && b.g > 0) b.vy = 0;
+    }
+    if (b.life > 0) { live++; const s = b.size * (0.35 + 0.65 * b.life / b.max); _m.makeScale(s, s, s); _m.setPosition(b.x, b.y + s / 2, b.z); }
+    else _m.makeScale(0, 0, 0);
+    bitMesh.setMatrixAt(i, _m);
+  }
+  bitMesh.instanceMatrix.needsUpdate = true; bitsLive = live; bitMesh.visible = live > 0;
+}
 function startFall(o, c, h) {
   o.state = 1;
   const f = { o, c, h, sx: o.x, sz: o.z, t: 0, T: clamp(0.35 + 0.22 * Math.sqrt(o.h / h.r), 0.35, 1.4), tilt: (Math.random() < 0.5 ? -1 : 1) * (0.35 + 0.5 * Math.random()) };
   o.fall = f; FALL.push(f);
-  if (h === H) gain(W.xpFor(o.r, H.r), o.r / H.r); else botGain(h, W.xpFor(o.r, h.r) * BOT_XP);
+  if (h === H) { gain(W.xpFor(o.r, H.r), o.r / H.r); if (state === 'play') { if (o.ty === COIN_TY) earnCoins(W.foundPay(H.r)); spawnBits(o.x, o.z); } }
+  else botGain(h, W.xpFor(o.r, h.r) * BOT_XP);
 }
 function dropFall(o) { const i = FALL.indexOf(o.fall); if (i >= 0) { FALL[i] = FALL[FALL.length - 1]; FALL.pop(); } o.fall = null; }
 function eatFor(h) {                                              // the player's hole and every bot eat by the same rule
@@ -486,11 +567,17 @@ function duels() {                                                // one hole sw
 }
 function swallowHole(a, b) {
   const xp = 3 * W.xpFor(b.r, a.r);
+  const times = b.deaths | 0;                                     // how often this bot has been swallowed before
   if (b === H) killPlayer(a);
-  else { b.alive = false; b.dying = 0.6; b.respawn = RESPAWN; }
-  if (a === H) { gain(xp, 1); toast('You swallowed ' + b.name, 1.8); sfx('bot'); } else botGain(a, xp * BOT_XP);
+  else { b.alive = false; b.dying = 0.6; b.respawn = RESPAWN; b.deaths = times + 1; }
+  if (a === H) {
+    gain(xp, 1); H.kills++; stat().kills++; profileDirty = true;
+    const pay = W.killPay(b.r, times); earnCoins(pay);
+    toast('You swallowed ' + b.name + '  +' + coinText(pay) + ' coins', 1.8); sfx('bot');
+  } else botGain(a, xp * BOT_XP);
 }
 function killPlayer(by) {
+  H.deaths++; stat().deaths++; profileDirty = true;
   setXp(H.xp / 2); H.r = H.rt;
   const ang = Math.atan2(H.z - by.z, H.x - by.x), away = 10 * by.r;
   H.x += Math.cos(ang) * away; H.z += Math.sin(ang) * away; H.vx = H.vz = 0; H.prot = 4;
@@ -546,6 +633,7 @@ function gain(xp, rel) {
   H.eaten++;
   const up = setXp(H.xp + xp);
   if (state !== 'play') return;                                   // the title screen's hole plays silently
+  if (H.level > H.best) { let c = 0; for (let L = H.best + 1; L <= H.level && L <= H.best + 3000; L++) c += W.levelPay(L); H.best = H.level; earnCoins(c); }   // only levels you have not reached before pay, so dying and climbing again earns nothing
   const now = performance.now();
   if (now - lastEatSound > 70) { lastEatSound = now; sfx('eat', rel); }
   if (up) { toast(H.level >= W.MAXLV ? 'Level 1,000: maximum!' : 'Level ' + H.level, 1.6); sfx('level'); }
@@ -596,9 +684,9 @@ const KEYMAP = { w: 'u', arrowup: 'u', s: 'd', arrowdown: 'd', a: 'l', arrowleft
 addEventListener('keydown', e => {
   ensureAudio();
   const k = e.key.toLowerCase();
-  if (k === 'escape') { e.preventDefault(); if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
+  if (k === 'escape') { e.preventDefault(); if (!$('#skins').hidden) closeSkins(); else if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
   if (KEYMAP[k]) { IN.keys[KEYMAP[k]] = true; if (k.startsWith('arrow')) e.preventDefault(); }
-  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
+  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden && $('#skins').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.key.toLowerCase()]; if (k) IN.keys[k] = false; });
 addEventListener('blur', () => { IN.keys = {}; IN.touch = null; $('#stick').hidden = true; });
@@ -671,7 +759,11 @@ function readSave(mode = MODE) {
   } catch (e) {}
   return null;
 }
-function save() { if (state === 'title') return; try { localStorage.setItem(SAVE_KEYS[MODE], JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten })); } catch (e) {} }
+function save() {
+  if (profileDirty) saveProfile();
+  if (state === 'title') return;
+  try { localStorage.setItem(SAVE_KEYS[MODE], JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten, k: H.kills, d: H.deaths, b: H.best })); } catch (e) {}
+}
 const hintsSeen = {};
 function hint(id, text, secs = 7) {
   if (hintsSeen[id]) return; hintsSeen[id] = 1;
@@ -698,8 +790,8 @@ function startGame(fresh, mode = 'normal') {
   clearWorld();
   W.setMode(mode); MODE = mode;                                   // the mode is set before any cell is made
   const s = fresh ? null : readSave(mode);
-  Object.assign(H, { x: s ? s.x : 0, z: s ? s.z : 0, vx: 0, vz: 0, eaten: s ? s.eaten | 0 : 0 });
-  setXp(s ? s.xp : 0); H.r = H.rt;
+  Object.assign(H, { x: s ? s.x : 0, z: s ? s.z : 0, vx: 0, vz: 0, eaten: s ? s.eaten | 0 : 0, kills: s ? s.k | 0 : 0, deaths: s ? s.d | 0 : 0 });
+  setXp(s ? s.xp : 0); H.r = H.rt; H.best = Math.max(H.level, s ? s.b | 0 : 0); clearBits(); popT = popSum = 0; $('#coinPop').classList.remove('on');
   state = 'play'; lastHud = ''; IN.mouse = false; H.prot = 8; ACTIVE = []; dyingBots = [];   // a few seconds before bots can swallow you                // the pointer is ignored until it moves, so the click on Play does not steer
   $('#title').hidden = true; $('#pause').hidden = true; $('#hud').hidden = false; $('#ver').hidden = true;
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
@@ -716,13 +808,14 @@ function showTitle() {
   clearWorld();
   W.setMode('quick'); const q = readSave('quick'), ql = q ? W.progress(q.xp).level : 0;     // the title shows each game's level
   W.setMode('normal'); MODE = 'normal';                            // and its own world is the normal one
-  Object.assign(H, { x: 0, z: 0, vx: 0, vz: 0, eaten: 0 }); setXp(0); H.r = H.rt; auto = { ang: 0.6 };
+  Object.assign(H, { x: 0, z: 0, vx: 0, vz: 0, eaten: 0, kills: 0, deaths: 0 }); setXp(0); H.r = H.rt; H.best = 1; clearBits(); auto = { ang: 0.6 };
   $('#hud').hidden = true; $('#pause').hidden = true; $('#title').hidden = false; $('#ver').hidden = false;
   const s = readSave();
   $('#bPlay').textContent = s ? 'Continue (Level ' + W.progress(s.xp).level + ')' : 'Play';
   $('#bNew').hidden = !s;
   $('#bQuick').textContent = q ? 'Continue Quick (Level ' + ql.toLocaleString('en-GB') + ')' : 'Quick Game';
   $('#bQuickNew').hidden = !q;
+  $('#bSkins').textContent = 'Skins (' + Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins)';
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
 }
 function openPause() { if (state !== 'play') return; state = 'pause'; save(); $('#pause').hidden = false; IN.touch = null; $('#stick').hidden = true; }
@@ -753,16 +846,72 @@ function renderSettings() {
     row.appendChild(seg); box.appendChild(row);
   }
 }
+// ------------------------------------------------------------------ the Skins screen
+// Skins (the hole's ring and pit), Effects (what flies up when something falls in) and Stats. Bought with coins; buying
+// puts it on at once. Opened from the title screen and the menu.
+let skTab = 'skin';
+const kdText = s => (s.deaths ? (s.kills / s.deaths).toFixed(1) : String(s.kills));
+function drawPreview(cv, kind, it) {                              // a small picture of a skin or an effect, a pixel at a time
+  const N = 28, g = cv.getContext('2d'); cv.width = cv.height = N;
+  g.fillStyle = '#0d0a1c'; g.fillRect(0, 0, N, N);
+  if (kind === 'skin') {
+    const top = new THREE.Color(it.pit[0]), bot = new THREE.Color(it.pit[1]), c = new THREE.Color();
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const dx = x + 0.5 - N / 2, dy = y + 0.5 - N / 2, d = Math.hypot(dx, dy);
+      if (d <= 8.5) c.copy(top).lerp(bot, d / 8.5);
+      else if (d <= 12.5) ringColour(it, Math.floor((Math.atan2(dy, dx) / (2 * Math.PI) + 1) % 1 * RING_SEG), c);
+      else continue;
+      g.fillStyle = '#' + c.getHexString(); g.fillRect(x, y, 1, 1);
+    }
+  } else if (it.n) {
+    const spots = [[6, 20], [11, 9], [15, 17], [19, 6], [22, 14], [9, 15], [17, 11], [21, 21], [13, 4], [5, 8], [24, 9], [12, 23]];
+    spots.forEach(([x, y], i) => { g.fillStyle = it.bits[i % it.bits.length]; const s = it.size > 0.25 ? 3 : 2; g.fillRect(x, y, s, s); });
+  } else { g.strokeStyle = '#6a5a8c'; g.lineWidth = 1; g.strokeRect(4.5, 4.5, N - 9, N - 9); g.beginPath(); g.moveTo(6, 22); g.lineTo(22, 6); g.stroke(); }
+}
+function renderSkins() {
+  $('#skCoins').textContent = Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins';
+  const tabs = $('#skTabs'); tabs.textContent = '';
+  for (const [id, label] of [['skin', 'Skins'], ['fx', 'Effects'], ['stats', 'Stats']]) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = label; b.dataset.tab = id; b.setAttribute('aria-pressed', String(skTab === id));
+    b.onclick = () => { skTab = id; renderSkins(); sfx('ui'); }; tabs.appendChild(b);
+  }
+  const grid = $('#skGrid'), stats = $('#skStats'); grid.textContent = ''; stats.textContent = '';
+  grid.hidden = skTab === 'stats'; stats.hidden = skTab !== 'stats';
+  if (skTab === 'stats') {
+    const card = (title, lines) => { const d = document.createElement('div'); d.className = 'skCard'; const h = document.createElement('div'); h.className = 'skName'; h.textContent = title; d.appendChild(h); const r = document.createElement('div'); lines.forEach(([k, v], i) => { if (i) r.append('  '); r.append(k + ' '); const b = document.createElement('b'); b.textContent = v; r.appendChild(b); }); d.appendChild(r); stats.appendChild(d); };
+    for (const [m, label] of [['normal', 'Normal Game'], ['quick', 'Quick Game']]) { const s = PROFILE.stats[m]; card(label, [['Kills', s.kills.toLocaleString('en-GB')], ['Deaths', s.deaths.toLocaleString('en-GB')], ['K/D', kdText(s)]]); }
+    if (state === 'pause') card('This Run', [['Kills', String(H.kills)], ['Deaths', String(H.deaths)], ['K/D', kdText({ kills: H.kills, deaths: H.deaths })]]);
+    card('Collection', [['Skins', PROFILE.owned.skin.length + ' of ' + K.SKINS.length], ['Effects', PROFILE.owned.fx.length + ' of ' + K.EFFECTS.length]]);
+    return;
+  }
+  for (const it of K.KINDS[skTab]) {
+    const owned = K.owns(PROFILE, skTab, it.id), worn = PROFILE.wear[skTab] === it.id, rar = K.RARITY[it.rarity];
+    const card = document.createElement('div'); card.className = 'skCard'; card.dataset.id = it.id; card.style.borderColor = rar.colour;
+    const cv = document.createElement('canvas'); drawPreview(cv, skTab, it);
+    const info = document.createElement('div'); info.className = 'skInfo';
+    const nm = document.createElement('div'); nm.className = 'skName'; nm.textContent = it.name;
+    const rr = document.createElement('div'); rr.className = 'skRar'; rr.textContent = rar.name; rr.style.color = rar.colour;
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn';
+    if (worn) { b.textContent = 'Worn'; b.setAttribute('aria-pressed', 'true'); }
+    else if (owned) { b.textContent = 'Wear'; b.onclick = () => { K.wear(PROFILE, skTab, it.id); saveProfile(); applySkin(); renderSkins(); sfx('ui'); }; }
+    else { b.textContent = 'Buy ' + it.price.toLocaleString('en-GB'); b.disabled = PROFILE.coins < it.price; b.onclick = () => { if (K.buy(PROFILE, skTab, it.id)) { saveProfile(); applySkin(); renderSkins(); sfx('level'); } }; }
+    info.append(nm, rr, b); card.append(cv, info); grid.appendChild(card);
+  }
+}
+function openSkins() { $('#skins').hidden = false; renderSkins(); }
+function closeSkins() { $('#skins').hidden = true; if (state === 'title') showTitleLabels(); }
+function showTitleLabels() { $('#bSkins').textContent = 'Skins (' + Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins)'; }
 $('#bPlay').onclick = () => startGame(false);
 $('#bNew').onclick = () => startGame(true);
 $('#bQuick').onclick = () => startGame(false, 'quick');
 $('#bQuickNew').onclick = () => startGame(true, 'quick');
+$('#bSkins').onclick = $('#bSkins2').onclick = openSkins; $('#bSkinsClose').onclick = closeSkins;
 $('#bSet').onclick = openSettings; $('#bSet2').onclick = openSettings; $('#bSetClose').onclick = closeSettings;
 $('#bMenu').onclick = openPause; $('#bResume').onclick = closePause;
 $('#bQuit').onclick = showTitle; $('#bHome').onclick = returnToStart;
 document.addEventListener('visibilitychange', () => { if (document.hidden) { save(); if (state === 'play') openPause(); } });
 addEventListener('pagehide', save);
-addEventListener('resize', resize);
+addEventListener('resize', () => { resize(); lastHud = ''; });
 $('#ver').textContent = 'Version ' + BUILD;
 
 // ------------------------------------------------------------------ the screen's numbers
@@ -770,12 +919,15 @@ let lastHud = '';
 function hud() {
   if (state === 'title') return;
   const p = H.level >= W.MAXLV ? 1 : H.frac, d = Math.hypot(H.x, H.z), b = W.BIOMES[W.biomeAt(H.x, H.z)].name;
-  const key = [H.level, Math.round(p * 500), H.eaten, Math.round(H.r * 100), Math.round(d), b].join();
+  const key = [H.level, Math.round(p * 500), H.eaten, Math.round(H.r * 100), Math.round(d), b, H.kills, H.deaths, Math.floor(PROFILE.coins)].join();
   if (key === lastHud) return; lastHud = key;
   $('#lvNum').textContent = 'Level ' + H.level.toLocaleString('en-GB');
   $('#lvSize').textContent = W.fmtLen(H.r * 2) + ' wide';
   $('#xpFill').style.width = (p * 100).toFixed(1) + '%';
   $('#lvEaten').textContent = 'Eaten ' + H.eaten.toLocaleString('en-GB');
+  $('#lvKD').textContent = 'Kills ' + H.kills.toLocaleString('en-GB') + ' / Deaths ' + H.deaths.toLocaleString('en-GB');
+  $('#lvCoins').textContent = Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins';
+  { const l = $('#lvl'); $('#board').style.top = (l.offsetTop + l.offsetHeight + 8) + 'px'; }   // the scoreboard sits under the level panel, whatever height that has (on a narrow screen the kills line wraps)
   $('#lvNext').textContent = H.level >= W.MAXLV ? 'MAX' : Math.round(p * 100) + '%';
   $('#wArea').textContent = b; $('#wDist').textContent = d < 1 ? 'At the start' : W.fmtLen(d) + ' from start';
 }
@@ -791,13 +943,15 @@ function frame(now) {
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
     H.prot = Math.max(0, H.prot - dt);
-    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play' && MODE !== 'quick') lostCheck(dt);
+    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); bitsStep(dt); if (state === 'play' && MODE !== 'quick') lostCheck(dt);
+    if (popT > 0) { popT -= dt; $('#coinPop').textContent = '+' + coinText(popSum); $('#coinPop').classList.toggle('on', popT > 0); if (popT <= 0) popSum = 0; }
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
   for (const p of POOLS) if (p) p.flush();
   const pulse = 0.5 + 0.5 * Math.sin(now / 260);
-  VIS[0].mat.color.setRGB(1, 0.9 + 0.1 * pulse, 0.55 + 0.3 * pulse);
+  { const br = 0.88 + 0.12 * pulse; VIS[0].mat.color.setRGB(br, br, br); }
+  { const sp = (K.find('skin', PROFILE.wear.skin) || K.SKINS[0]).spin; if (sp && !reduceMotion) VIS[0].a.rotation.y += sp * dt; }
   VIS[0].a.visible = H.prot <= 0 || Math.floor(now / 110) % 2 === 0;   // your ring blinks while you are protected
   hud(); updateLabels(); updateBoard(dt);
   renderer.info.reset();
@@ -811,7 +965,7 @@ window.__rh = {
   wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; }, BOTS, get active() { return ACTIVE; }, get dying() { return dyingBots; }, VIS, UN,
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
-  get mode() { return MODE; }, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
+  get mode() { return MODE; }, get profile() { return PROFILE; }, K, openSkins, closeSkins, saveProfile, applySkin, earnCoins, get bits() { return bitsLive; }, spawnBits, COIN_TY, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
   teleport(x, z) { H.x = x; H.z = z; H.vx = H.vz = 0; plan(); makeCells(1000); },
   setXp(xp) { setXp(xp); H.r = H.rt; },
   nearestEdible(re) {                                              // the nearest thing the hole can eat (only types matching re, if given)
