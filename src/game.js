@@ -101,21 +101,19 @@ function applyLook() {
 
 // ------------------------------------------------------------------ materials
 // Everything is lit flat (boxes), with colours as written. Two touches go into the shaders. The ground has the hole cut
-// out of it (a round gap with a darker rim). A thing too big to eat that is over the hole, or in front of it, dissolves:
+// out of it (a round gap with a darker rim, one for each hole: yours and the bots'). A thing too big to eat that is over the hole, or in front of it, dissolves:
 // it loses pixels in the pattern of the post filter, by an amount (aFade, 0 to 1) the game sets for each thing, so the
 // hole and what is round it can always be seen and nothing blocks the camera.
-const UN = {
-  uHoleW: { value: new THREE.Vector3() }, uHoleR: { value: 1 },
-  uRight: { value: new THREE.Vector3(1, 0, 0) }, uUp: { value: new THREE.Vector3(0, 1, 0) }, uView: { value: new THREE.Vector3(0, 0, 1) },
-};
+const MAXH = 13;                                                  // the player's hole and up to 12 bots are drawn and cut out of the ground
+const UN = { uHoles: { value: Array.from({ length: MAXH }, () => new THREE.Vector3()) }, uNH: { value: 1 } };   // each hole: x, z, radius
 const groundMat = new THREE.MeshLambertMaterial();
 groundMat.onBeforeCompile = sh => {
   Object.assign(sh.uniforms, UN);
   sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
     .replace('#include <project_vertex>', '#include <project_vertex>\nvWP = (instanceMatrix * vec4(transformed, 1.0)).xyz;');
-  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nuniform vec3 uHoleW; uniform float uHoleR;')
-    .replace('void main() {', 'void main() {\nfloat dh = length(vWP.xz - uHoleW.xz); if (dh < uHoleR) discard;')
-    .replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (dh < uHoleR * 1.12) gl_FragColor.rgb *= 0.55;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nuniform vec3 uHoles[13]; uniform int uNH;')
+    .replace('void main() {', 'void main() {\nfloat rim = 0.0;\nfor (int i = 0; i < 13; i++) { if (i >= uNH) break; vec3 h = uHoles[i]; float dd = length(vWP.xz - h.xy); if (dd < h.z) discard; if (dd < h.z * 1.12) rim = 1.0; }')
+    .replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (rim > 0.5) gl_FragColor.rgb *= 0.55;');
 };
 const thingMat = new THREE.MeshLambertMaterial({ vertexColors: true });
 thingMat.onBeforeCompile = sh => {
@@ -131,7 +129,7 @@ thingMat.onBeforeCompile = sh => {
 // ------------------------------------------------------------------ the hole
 // A round gap in the ground (see the ground's shader), a dark pit under it that things fall into, and a ring drawn over
 // everything so the hole is never lost.
-const H = { x: 0, z: 0, r: W.R0, rt: W.R0, xp: 0, level: 1, frac: 0, eaten: 0, vx: 0, vz: 0 };
+const H = { x: 0, z: 0, r: W.R0, rt: W.R0, xp: 0, level: 1, frac: 0, eaten: 0, vx: 0, vz: 0, prot: 0 };
 const pitGeo = new THREE.CylinderGeometry(1, 1, 1, 40, 1, true);
 pitGeo.translate(0, -0.5, 0);
 {
@@ -139,16 +137,26 @@ pitGeo.translate(0, -0.5, 0);
   for (let i = 0; i < pos.count; i++) { c.copy(top).lerp(bot, clamp(-pos.getY(i), 0, 1)); cols.push(c.r, c.g, c.b); }
   pitGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
 }
-const pit = new THREE.Group();
-pit.add(new THREE.Mesh(pitGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-const pitFloor = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0c0818 }));
-pitFloor.position.y = -1;
-pit.add(pitFloor);
-scene.add(pit);
-const ringMats = [new THREE.MeshBasicMaterial({ color: 0x1a1433, depthTest: false, depthWrite: false }), new THREE.MeshBasicMaterial({ color: 0xfff1b0, depthTest: false, depthWrite: false })];
-const ringA = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.1, 48).rotateX(-Math.PI / 2), ringMats[1]);
-const ringB = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.2, 48).rotateX(-Math.PI / 2), ringMats[0]);
-for (const m of [ringA, ringB]) { m.renderOrder = 5; m.frustumCulled = false; scene.add(m); }
+const pitMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide });
+const floorGeo = new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), floorMat = new THREE.MeshBasicMaterial({ color: 0x0c0818 });
+const ringGeoA = new THREE.RingGeometry(1.0, 1.1, 48).rotateX(-Math.PI / 2), ringGeoB = new THREE.RingGeometry(1.1, 1.2, 48).rotateX(-Math.PI / 2);
+const darkRing = new THREE.MeshBasicMaterial({ color: 0x1a1433, depthTest: false, depthWrite: false });
+function makeVisual(hex) {                                        // a pit under the ground, and a coloured ring over everything
+  const pit = new THREE.Group(), floor = new THREE.Mesh(floorGeo, floorMat);
+  pit.add(new THREE.Mesh(pitGeo, pitMat)); floor.position.y = -1; pit.add(floor);
+  const mat = new THREE.MeshBasicMaterial({ color: hex, depthTest: false, depthWrite: false });
+  const a = new THREE.Mesh(ringGeoA, mat), b = new THREE.Mesh(ringGeoB, darkRing);
+  for (const m of [a, b]) { m.renderOrder = 5; m.frustumCulled = false; }
+  scene.add(pit, a, b);
+  return { pit, a, b, mat };
+}
+const VIS = [makeVisual(0xfff1b0)];                               // 0 is the player's; the bots' are added as they are needed
+function placeVisual(v, x, z, r, show) {
+  v.pit.visible = v.a.visible = v.b.visible = show;
+  if (!show) return;
+  v.pit.position.set(x, 0, z); v.pit.scale.set(r, 14 * r, r);
+  for (const m of [v.a, v.b]) { m.position.set(x, 0.01 * r, z); m.scale.setScalar(r); }
+}
 
 // ------------------------------------------------------------------ standing things
 // One instanced mesh for each kind of thing (a house, a cow ...), shared by every cell; a thing is a slot in it.
@@ -250,10 +258,12 @@ function mount(c) {
     const p = pool(o.ty); o.slot = p.alloc(); _q.setFromAxisAngle(Y, o.yaw); p.put(o.slot, o.x, 0, o.z, _q, o.s, o.br);
   }
   objTotal += c.objs.length; CELLS.set(c.key, c);
+  if (c.bot && state === 'play') BOTS.push(makeBot(c));          // a bot lives in its cell while the cell is loaded
 }
 function unmount(c) {
   for (const o of c.objs) if (o.state < 2) { if (o.state === 1) dropFall(o); FADING.delete(o); o.fd = 0; o.fading = false; POOLS[o.ty].release(o.slot); o.state = 2; }
   objTotal -= c.objs.length; CELLS.delete(c.key);
+  for (let i = BOTS.length - 1; i >= 0; i--) if (BOTS[i].cell === c) BOTS.splice(i, 1);
 }
 // How far the nearest edge of a cell is from the hole: the same measure wantedCells() sorts by.
 const cellDist = c => Math.hypot(H.x - Math.min(Math.max(H.x, c.x0), c.x0 + c.C), H.z - Math.min(Math.max(H.z, c.z0), c.z0 + c.C));
@@ -288,6 +298,7 @@ function makeCells(maxMs) {
 }
 function clearWorld() {
   for (const c of [...CELLS.values()]) unmount(c);
+  ACTIVE = []; dyingBots = [];
   FALL.length = 0; queue = [];
 }
 
@@ -296,36 +307,37 @@ function clearWorld() {
 // towards the middle, and is gone when it is below the ground.
 const FALL = [];
 let lastEatSound = 0;
-function startFall(o, c) {
+function startFall(o, c, h) {
   o.state = 1;
-  const f = { o, c, sx: o.x, sz: o.z, t: 0, T: clamp(0.35 + 0.22 * Math.sqrt(o.h / H.r), 0.35, 1.4), tilt: (Math.random() < 0.5 ? -1 : 1) * (0.35 + 0.5 * Math.random()) };
+  const f = { o, c, h, sx: o.x, sz: o.z, t: 0, T: clamp(0.35 + 0.22 * Math.sqrt(o.h / h.r), 0.35, 1.4), tilt: (Math.random() < 0.5 ? -1 : 1) * (0.35 + 0.5 * Math.random()) };
   o.fall = f; FALL.push(f);
-  gain(W.xpFor(o.r, H.r), o.r / H.r);
+  if (h === H) gain(W.xpFor(o.r, H.r), o.r / H.r); else botGain(h, W.xpFor(o.r, h.r) * BOT_XP);
 }
 function dropFall(o) { const i = FALL.indexOf(o.fall); if (i >= 0) { FALL[i] = FALL[FALL.length - 1]; FALL.pop(); } o.fall = null; }
-function eatStep() {
-  const r = H.r;
+function eatFor(h) {                                              // the player's hole and every bot eat by the same rule
+  const r = h.r;
   for (const c of CELLS.values()) {
     const reach = r + c.maxR;
-    if (H.x < c.x0 - reach || H.x > c.x0 + c.C + reach || H.z < c.z0 - reach || H.z > c.z0 + c.C + reach) continue;
+    if (h.x < c.x0 - reach || h.x > c.x0 + c.C + reach || h.z < c.z0 - reach || h.z > c.z0 + c.C + reach) continue;
     for (const o of c.objs) {
       if (o.state) continue;
-      const dx = o.x - H.x, dz = o.z - H.z, d2 = dx * dx + dz * dz, lim = r + o.r;
+      const dx = o.x - h.x, dz = o.z - h.z, d2 = dx * dx + dz * dz, lim = r + o.r;
       if (d2 > lim * lim || !W.canEat(o.r, r)) continue;
       const sw = W.swallowDist(o.r, r);
-      if (d2 <= sw * sw) startFall(o, c);
+      if (d2 <= sw * sw) startFall(o, c, h);
     }
   }
 }
+function eatStep() { eatFor(H); for (const b of ACTIVE) eatFor(b); }
 function fallStep(dt) {
   for (let k = FALL.length - 1; k >= 0; k--) {
-    const f = FALL[k], o = f.o, p = POOLS[o.ty];
+    const f = FALL[k], o = f.o, p = POOLS[o.ty], h = f.h;
     f.t += dt;
     const u = f.t / f.T;
     if (u >= 1) { p.release(o.slot); o.state = 2; o.fall = null; FALL[k] = FALL[FALL.length - 1]; FALL.pop(); continue; }
     const e = u * u, pull = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
-    const x = lerp(f.sx, H.x, pull * 0.92), z = lerp(f.sz, H.z, pull * 0.92), y = -(o.h + 0.25 * H.r) * e;
-    const dx = H.x - o.x, dz = H.z - o.z, l = Math.hypot(dx, dz) || 1;
+    const x = lerp(f.sx, h.x, pull * 0.92), z = lerp(f.sz, h.z, pull * 0.92), y = -(o.h + 0.25 * h.r) * e;
+    const dx = h.x - o.x, dz = h.z - o.z, l = Math.hypot(dx, dz) || 1;
     _q.setFromAxisAngle(Y, o.yaw);
     _q2.setFromAxisAngle(_p.set(dz / l, 0, -dx / l), f.tilt * Math.min(1, u * 1.8)); _q.premultiply(_q2);
     p.put(o.slot, x, y, z, _q, o.s);
@@ -397,6 +409,130 @@ function wander(dt, now) {
   }
 }
 
+// ------------------------------------------------------------------ rival holes
+// A bot lives in a cell (world.js decides which, from the seed) while that cell is loaded. It eats the same way the
+// player does, grows by the same rules, and is moved here. The bots nearest the player (at most 12) are the active
+// ones: drawn, cut out of the ground and simulated; the others stand still and unseen. A bot hunts a hole it can
+// swallow that is near, flees from one that could swallow it, and otherwise goes for the juiciest thing it can eat.
+// A hole swallows another when it is at least about 8% wider and its middle is over it (the same rule as for things).
+// If a bot swallows you, you lose half your xp and come back a little way off, protected for a few seconds.
+const BOTS = [], MAXBOTS = MAXH - 1, BOT_XP = 0.2, RESPAWN = 25, BOT_SPEED = 0.6, BOT_CAP = 3;   // bots earn less xp a thing than you, and stop growing at BOT_CAP times the size their place suits
+let ACTIVE = [], boardT = 0, dyingBots = [];
+function botSetXp(b, xp) {                                        // a bot's level goes with its size, and stops at its cap: 1.4 times what the place suits near the start, BOT_CAP times further out
+  const d = Math.hypot(b.spec.x, b.spec.z), cap = Math.max(W.R0 * W.scaleAt(d) * (d < 150 ? 1.4 : BOT_CAP), b.spec.r);
+  b.xp = Math.min(xp, W.MAXXP, W.xpForRadius(cap)); const p = W.progress(b.xp); b.level = p.level; b.frac = p.frac; b.rt = W.radiusAt(p.level, p.frac);
+}
+function botGain(b, xp) { b.eaten++; botSetXp(b, b.xp + xp); }
+function makeBot(c) {
+  const s = c.bot, b = { isBot: true, id: s.id, name: s.name, hex: s.colour, aggr: s.aggr, spec: s, cell: c, x: s.x, z: s.z, vx: 0, vz: 0, r: s.r, rt: s.r, xp: 0, level: 1, frac: 0,
+    eaten: 0, alive: true, dying: 0, respawn: 0, prot: 2, think: Math.random() * 0.2, ang: Math.random() * 6.283, dx: 0, dz: 0, sp: 0, mode: 'wander' };
+  botSetXp(b, W.xpForRadius(s.r)); b.r = b.rt;
+  return b;
+}
+function bestFood(b) {                                            // the thing worth most, for its distance, that b can eat and is near
+  const reach = 14 * b.r; let best = null, bs = 0;
+  for (const c of CELLS.values()) {
+    if (b.x < c.x0 - reach || b.x > c.x0 + c.C + reach || b.z < c.z0 - reach || b.z > c.z0 + c.C + reach) continue;
+    for (const o of c.objs) {
+      if (o.state || !W.canEat(o.r, b.r)) continue;
+      const d = Math.hypot(o.x - b.x, o.z - b.z);
+      if (d > reach) continue;
+      const score = W.xpFor(o.r, b.r) / ((d + b.r) * (d + b.r));
+      if (score > bs) { bs = score; best = o; }
+    }
+  }
+  return best;
+}
+function botThink(b) {
+  let flee = null, chase = null, fd = 1e18, cd = 1e18;
+  for (const o of [H, ...ACTIVE]) {
+    if (o === b || (o === H && state !== 'play')) continue;
+    const d = Math.hypot(o.x - b.x, o.z - b.z);
+    if (o.r * W.EAT_MAX >= b.r) { if (!(o.prot > 0) && d < (7 + 3 * b.aggr) * o.r && d < fd) { fd = d; flee = o; } }
+    else if (b.r * W.EAT_MAX >= o.r && !(o.prot > 0) && d < (4 + 9 * b.aggr) * b.r && d < cd) { cd = d; chase = o; }
+  }
+  let dx, dz;
+  if (flee) { dx = b.x - flee.x; dz = b.z - flee.z; b.sp = 1.2; b.mode = 'flee'; }
+  else if (chase) { dx = chase.x - b.x; dz = chase.z - b.z; b.sp = 1; b.mode = 'hunt'; }
+  else {
+    const f = bestFood(b);
+    if (f) { dx = f.x - b.x; dz = f.z - b.z; b.sp = 0.9; b.mode = 'food'; }
+    else { b.ang += (Math.random() - 0.5) * 1.6; dx = Math.cos(b.ang); dz = Math.sin(b.ang); b.sp = 0.6; b.mode = 'wander'; }
+  }
+  const l = Math.hypot(dx, dz) || 1; b.dx = dx / l; b.dz = dz / l;
+  if (b.mode !== 'wander') b.ang = Math.atan2(b.dz, b.dx);
+}
+function botsStep(dt) {
+  for (const b of BOTS) { b.d = Math.hypot(b.x - H.x, b.z - H.z); if (!b.alive && b.dying <= 0) { b.respawn -= dt; if (b.respawn <= 0) { const nb = makeBot(b.cell); Object.assign(b, nb, { prot: 3 }); } } }
+  ACTIVE = BOTS.filter(b => b.alive).sort((p, q) => p.d - q.d).slice(0, MAXBOTS);
+  dyingBots = BOTS.filter(b => b.dying > 0 && b.d < 40 * H.r);
+  for (const b of dyingBots) b.dying = Math.max(0, b.dying - dt);
+  for (const b of ACTIVE) {
+    b.prot = Math.max(0, b.prot - dt);
+    b.think -= dt; if (b.think <= 0) { b.think = 0.2 + Math.random() * 0.1; botThink(b); }
+    const sp = SPEED * b.r * BOT_SPEED * b.sp, k = Math.min(1, dt * 6);
+    b.vx += (b.dx * sp - b.vx) * k; b.vz += (b.dz * sp - b.vz) * k;
+    b.x += b.vx * dt; b.z += b.vz * dt;
+    b.r += (b.rt - b.r) * Math.min(1, dt * 6);
+  }
+  duels();
+}
+function duels() {                                                // one hole swallowing another, one a frame
+  const hs = [H, ...ACTIVE];
+  for (const a of hs) for (const b of hs) {
+    if (a === b || b.prot > 0 || a.r * W.EAT_MAX < b.r) continue;
+    if (Math.hypot(a.x - b.x, a.z - b.z) <= W.swallowDist(b.r, a.r)) { swallowHole(a, b); return; }
+  }
+}
+function swallowHole(a, b) {
+  const xp = 3 * W.xpFor(b.r, a.r);
+  if (b === H) killPlayer(a);
+  else { b.alive = false; b.dying = 0.6; b.respawn = RESPAWN; }
+  if (a === H) { gain(xp, 1); toast('You swallowed ' + b.name, 1.8); sfx('bot'); } else botGain(a, xp * BOT_XP);
+}
+function killPlayer(by) {
+  setXp(H.xp / 2); H.r = H.rt;
+  const ang = Math.atan2(H.z - by.z, H.x - by.x), away = 10 * by.r;
+  H.x += Math.cos(ang) * away; H.z += Math.sin(ang) * away; H.vx = H.vz = 0; H.prot = 4;
+  plan(); makeCells(200);
+  toast('Swallowed by ' + by.name + '. You lost half your xp.', 3.2); sfx('lose');
+}
+const _v = new THREE.Vector3();
+function updateHoles() {                                          // the holes the ground is cut out for, and their pits and rings
+  const list = [H, ...ACTIVE];
+  for (let i = 0; i < list.length; i++) UN.uHoles.value[i].set(list[i].x, list[i].z, list[i].r);
+  UN.uNH.value = list.length;
+  placeVisual(VIS[0], H.x, H.z, H.r, true);
+  const show = [...ACTIVE, ...dyingBots.filter(b => ACTIVE.indexOf(b) < 0)].slice(0, MAXBOTS);
+  while (VIS.length <= show.length) VIS.push(makeVisual(0xffffff));
+  for (let i = 0; i < show.length; i++) { const b = show[i], v = VIS[i + 1]; v.mat.color.set(b.hex); placeVisual(v, b.x, b.z, b.r * (b.alive ? 1 : b.dying / 0.6), true); }
+  for (let i = show.length + 1; i < VIS.length; i++) placeVisual(VIS[i], 0, 0, 1, false);
+}
+const LB = [];
+function updateLabels() {                                         // a name and level above each active bot; red if it could swallow you, green if you could swallow it
+  const box = $('#labels');
+  for (let i = 0; i < MAXBOTS; i++) {
+    let el = LB[i];
+    if (!el) { el = LB[i] = document.createElement('div'); el.className = 'botLabel'; box.appendChild(el); }
+    const b = ACTIVE[i];
+    if (!b || state === 'title') { el.hidden = true; continue; }
+    _v.set(b.x, 0, b.z).project(camera);
+    const x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight, sr = b.r / CAM.h * innerHeight / 2;
+    if (x < -60 || x > innerWidth + 60 || y < -30 || y > innerHeight + 30) { el.hidden = true; continue; }
+    el.hidden = false; el.style.left = x + 'px'; el.style.top = (y - sr * 0.9 - 14) + 'px';
+    const txt = b.name + ' ' + b.level; if (el.textContent !== txt) el.textContent = txt;
+    el.style.color = b.hex; el.dataset.danger = b.r * W.EAT_MAX >= H.r ? '1' : H.r * W.EAT_MAX >= b.r ? '2' : '0';
+  }
+}
+function updateBoard(dt) {                                        // the biggest holes near you
+  boardT -= dt; if (boardT > 0) return; boardT = 0.5;
+  const box = $('#board');
+  if (state !== 'play' || !ACTIVE.length) { box.hidden = true; return; }
+  const rows = [{ name: 'You', level: H.level, r: H.r, you: true }, ...ACTIVE.map(b => ({ name: b.name, level: b.level, r: b.r, hex: b.hex }))].sort((p, q) => q.r - p.r).slice(0, 6);
+  box.hidden = false; box.textContent = '';
+  rows.forEach((o, i) => { const d = document.createElement('div'); d.className = o.you ? 'you' : ''; d.textContent = (i + 1) + '. ' + o.name + '  ' + o.level; if (o.hex) d.style.color = o.hex; box.appendChild(d); });
+}
+
 // ------------------------------------------------------------------ levels
 let toastTimer = 0;
 function toast(msg, secs = 1.8) { const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), secs * 1000); }
@@ -433,6 +569,8 @@ function sfx(kind, rel = 0.3) {
   if (kind === 'eat') blip(560 - 300 * clamp(rel, 0, 1), 0.12, 'square', 0.09, 0.5);
   else if (kind === 'level') [523, 659, 784, 1047].forEach((f, i) => blip(f, 0.16, 'square', 0.1, 0, i * 0.07));
   else if (kind === 'ui') blip(440, 0.06, 'square', 0.07);
+  else if (kind === 'bot') [660, 880, 1100].forEach((f, i) => blip(f, 0.1, 'square', 0.1, 0, i * 0.05));
+  else if (kind === 'lose') [330, 247, 185, 139].forEach((f, i) => blip(f, 0.2, 'sawtooth', 0.1, 0.8, i * 0.1));
 }
 
 // ------------------------------------------------------------------ steering
@@ -507,7 +645,6 @@ function autopilot(dt) {
 
 // ------------------------------------------------------------------ the camera
 const CAM = { h: 7.6 * W.R0, k: 1 };                              // k: 1 on the title screen (the hole sits low and right, clear of the buttons), 0 in a game
-const _right = new THREE.Vector3(), _up = new THREE.Vector3(), _view = new THREE.Vector3();
 function updateCamera(dt, snap) {
   CAM.h = snap ? 7.6 * H.r : CAM.h + (7.6 * H.r - CAM.h) * Math.min(1, dt * 3);
   const goalK = state === 'title' ? 1 : 0;
@@ -518,13 +655,9 @@ function updateCamera(dt, snap) {
   camera.near = D * 0.2; camera.far = D * 1.8; camera.updateProjectionMatrix();
   camera.position.set(tx + TO_CAM.x * D, TO_CAM.y * D, tz + TO_CAM.z * D);
   camera.lookAt(tx, 0, tz); camera.updateMatrixWorld();
-  camera.matrixWorld.extractBasis(_right, _up, _view);
-  UN.uRight.value.copy(_right); UN.uUp.value.copy(_up); UN.uView.value.copy(_view);
-  UN.uHoleW.value.set(H.x, 0, H.z); UN.uHoleR.value = H.r;
   postMat.uniforms.uRange.value = camera.far - camera.near;
   postMat.uniforms.uEdge.value = 0.1 * H.r;
-  pit.position.set(H.x, 0, H.z); pit.scale.set(H.r, 14 * H.r, H.r);
-  for (const m of [ringA, ringB]) { m.position.set(H.x, 0.01 * H.r, H.z); m.scale.setScalar(H.r); }
+  updateHoles();
 }
 
 // ------------------------------------------------------------------ screens
@@ -554,6 +687,7 @@ function lostCheck(dt) {                                          // nothing sma
 }
 function progressHints() {
   if (state !== 'play') return;
+  if (ACTIVE.length) hint('bots', 'Other holes are competing with you. A bigger hole can swallow you, and you can swallow a smaller one: red names are bigger, green are smaller.', 9);
   if (H.eaten === 1) hint('first', 'Nicely done. Everything smaller than your hole falls in. Each thing eaten makes you bigger.');
   if (H.level >= 4) hint('far', 'Walking away from the start finds bigger things to eat. Things get bigger the further out you go.');
   if (H.level >= 12) hint('area', 'Villages, forests and cities each have their own things. Big things that block your view fade out while you are under them.');
@@ -564,7 +698,7 @@ function startGame(fresh) {
   const s = fresh ? null : readSave();
   Object.assign(H, { x: s ? s.x : 0, z: s ? s.z : 0, vx: 0, vz: 0, eaten: s ? s.eaten | 0 : 0 });
   setXp(s ? s.xp : 0); H.r = H.rt;
-  state = 'play'; lastHud = ''; IN.mouse = false;                // the pointer is ignored until it moves, so the click on Play does not steer
+  state = 'play'; lastHud = ''; IN.mouse = false; H.prot = 8; ACTIVE = []; dyingBots = [];   // a few seconds before bots can swallow you                // the pointer is ignored until it moves, so the click on Play does not steer
   $('#title').hidden = true; $('#pause').hidden = true; $('#hud').hidden = false; $('#ver').hidden = true;
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
   if (fresh) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
@@ -647,14 +781,16 @@ function frame(now) {
     H.r += (H.rt - H.r) * Math.min(1, dt * 6);
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
-    wander(dt, now); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play') lostCheck(dt);
+    H.prot = Math.max(0, H.prot - dt);
+    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play') lostCheck(dt);
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
   for (const p of POOLS) if (p) p.flush();
   const pulse = 0.5 + 0.5 * Math.sin(now / 260);
-  ringMats[1].color.setRGB(1, 0.9 + 0.1 * pulse, 0.55 + 0.3 * pulse);
-  hud();
+  VIS[0].mat.color.setRGB(1, 0.9 + 0.1 * pulse, 0.55 + 0.3 * pulse);
+  VIS[0].a.visible = H.prot <= 0 || Math.floor(now / 110) % 2 === 0;   // your ring blinks while you are protected
+  hud(); updateLabels(); updateBoard(dt);
   renderer.info.reset();
   renderer.setRenderTarget(rt); renderer.render(scene, camera);
   drawn = { calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
@@ -663,7 +799,7 @@ function frame(now) {
 
 // ------------------------------------------------------------------ for the tests
 window.__rh = {
-  wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; },
+  wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; }, BOTS, get active() { return ACTIVE; }, get dying() { return dyingBots; }, VIS, UN,
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
   start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
