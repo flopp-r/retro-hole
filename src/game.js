@@ -25,10 +25,17 @@ const saveS = () => { try { localStorage.setItem('retroHole.settings', JSON.stri
 // ------------------------------------------------------------------ the profile
 // Coins, the skins and effects owned and worn, and kills and deaths for good, kept in the browser (retroHole.profile).
 // Coins are earned by levels, kills and coins found on the map (world.js, COINS) and spent on the Skins screen.
-let PROFILE = K.fresh();
-try { PROFILE = K.validate(JSON.parse(localStorage.getItem('retroHole.profile') || 'null')); } catch (e) {}
+// Admin mode (for the owner, to try everything) keeps a separate test profile and test saves, so the real ones are never touched.
+let ADMIN = false, GOD = false;
+try { ADMIN = localStorage.getItem('retroHole.admin') === '1'; } catch (e) {}
+const profileKey = () => ADMIN ? 'retroHole.profileAdmin' : 'retroHole.profile';
+function loadProfile() {
+  try { const raw = localStorage.getItem(profileKey()); if (raw) return K.validate(JSON.parse(raw)); } catch (e) {}
+  return ADMIN ? K.full() : K.fresh();
+}
+let PROFILE = loadProfile();
 let profileDirty = false;
-function saveProfile() { profileDirty = false; try { localStorage.setItem('retroHole.profile', JSON.stringify(PROFILE)); } catch (e) {} }
+function saveProfile() { profileDirty = false; try { localStorage.setItem(profileKey(), JSON.stringify(PROFILE)); } catch (e) {} }
 let popSum = 0, popT = 0;
 function earnCoins(n) { if (!(n > 0)) return; K.earn(PROFILE, n); profileDirty = true; popSum += n; popT = 1.6; }
 const coinText = n => n >= 10 ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
@@ -566,6 +573,7 @@ function duels() {                                                // one hole sw
   }
 }
 function swallowHole(a, b) {
+  if (b === H && ADMIN && GOD) return;                            // admin mode: you can't be swallowed
   const xp = 3 * W.xpFor(b.r, a.r);
   const times = b.deaths | 0;                                     // how often this bot has been swallowed before
   if (b === H) killPlayer(a);
@@ -684,9 +692,9 @@ const KEYMAP = { w: 'u', arrowup: 'u', s: 'd', arrowdown: 'd', a: 'l', arrowleft
 addEventListener('keydown', e => {
   ensureAudio();
   const k = e.key.toLowerCase();
-  if (k === 'escape') { e.preventDefault(); if (!$('#skins').hidden) closeSkins(); else if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
+  if (k === 'escape') { e.preventDefault(); if (!$('#admin').hidden) closeAdmin(); else if (!$('#skins').hidden) closeSkins(); else if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
   if (KEYMAP[k]) { IN.keys[KEYMAP[k]] = true; if (k.startsWith('arrow')) e.preventDefault(); }
-  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden && $('#skins').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
+  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden && $('#skins').hidden && $('#admin').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.key.toLowerCase()]; if (k) IN.keys[k] = false; });
 addEventListener('blur', () => { IN.keys = {}; IN.touch = null; $('#stick').hidden = true; });
@@ -752,9 +760,10 @@ function updateCamera(dt, snap) {
 let state = 'title';                                              // title, play or pause
 let MODE = 'normal';                                              // the game being played: 'normal' (the endless map) or 'quick' (one fixed scale, no level cap, extremely fast growth)
 const SAVE_KEYS = { normal: 'retroHole.save', quick: 'retroHole.saveQuick' };
+const saveKey = mode => SAVE_KEYS[mode] + (ADMIN ? 'Admin' : '');
 function readSave(mode = MODE) {
   try {
-    const s = JSON.parse(localStorage.getItem(SAVE_KEYS[mode]) || 'null');
+    const s = JSON.parse(localStorage.getItem(saveKey(mode)) || 'null');
     if (s && s.v === 1 && isFinite(s.x) && isFinite(s.z) && s.xp >= 0) return s;
   } catch (e) {}
   return null;
@@ -762,7 +771,7 @@ function readSave(mode = MODE) {
 function save() {
   if (profileDirty) saveProfile();
   if (state === 'title') return;
-  try { localStorage.setItem(SAVE_KEYS[MODE], JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten, k: H.kills, d: H.deaths, b: H.best })); } catch (e) {}
+  try { localStorage.setItem(saveKey(MODE), JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten, k: H.kills, d: H.deaths, b: H.best })); } catch (e) {}
 }
 const hintsSeen = {};
 function hint(id, text, secs = 7) {
@@ -795,13 +804,18 @@ function startGame(fresh, mode = 'normal') {
   state = 'play'; lastHud = ''; IN.mouse = false; H.prot = 8; ACTIVE = []; dyingBots = [];   // a few seconds before bots can swallow you                // the pointer is ignored until it moves, so the click on Play does not steer
   $('#title').hidden = true; $('#pause').hidden = true; $('#hud').hidden = false; $('#ver').hidden = true;
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
-  if (fresh) { try { localStorage.removeItem(SAVE_KEYS[mode]); } catch (e) {} }
-  $('#wMode').hidden = mode !== 'quick';
+  if (fresh) { try { localStorage.removeItem(saveKey(mode)); } catch (e) {} }
+  $('#wMode').hidden = mode !== 'quick'; $('#wAdmin').hidden = !ADMIN;
   hint('steer', 'Steer with the mouse, WASD or the arrow keys, or touch and drag. Eat things smaller than your hole.', 9);
   progressHints();
   save();
 }
-function returnToStart() { H.x = 0; H.z = 0; H.vx = H.vz = 0; clearWorld(); plan(); makeCells(400); updateGround(); updateCamera(0, true); save(); closePause(); toast('Back at the start', 1.6); }
+function rebuildWorld() {                                         // the cells made again round the hole; a bot is only made while the game is 'play', so a paused game counts as playing for this
+  const s = state; if (s === 'pause') state = 'play';
+  clearWorld(); plan(); makeCells(400); updateGround(); updateCamera(0, true);
+  state = s;
+}
+function returnToStart() { H.x = 0; H.z = 0; H.vx = H.vz = 0; rebuildWorld(); save(); closePause(); toast('Back at the start', 1.6); }
 function showTitle() {
   save();
   state = 'title';
@@ -818,7 +832,7 @@ function showTitle() {
   $('#bSkins').textContent = 'Skins (' + Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins)';
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
 }
-function openPause() { if (state !== 'play') return; state = 'pause'; save(); $('#pause').hidden = false; IN.touch = null; $('#stick').hidden = true; }
+function openPause() { if (state !== 'play') return; state = 'pause'; save(); $('#bAdmin').hidden = !ADMIN; $('#pause').hidden = false; IN.touch = null; $('#stick').hidden = true; }
 function closePause() { if (state !== 'pause') return; state = 'play'; IN.mouse = false; $('#pause').hidden = true; }
 let settingsFrom = null;
 function openSettings() { settingsFrom = state; $('#settings').hidden = false; renderSettings(); }
@@ -901,6 +915,62 @@ function renderSkins() {
 function openSkins() { $('#skins').hidden = false; renderSkins(); }
 function closeSkins() { $('#skins').hidden = true; if (state === 'title') showTitleLabels(); }
 function showTitleLabels() { $('#bSkins').textContent = 'Skins (' + Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins)'; }
+// ------------------------------------------------------------------ admin mode
+// For the owner, to try everything. The word is never in this file, only the SHA-256 fingerprint of 'retroRack:' plus
+// the word in lower case (the same fingerprint as Retro Rack's and Retro Set's, so one word opens all three). Typing the
+// word on the title screen, with no box to type it in, switches admin mode on or off. While it is on the game uses a test
+// profile (all skins, 100,000 coins) and test saves, and the menu has an Admin panel: set the level, add coins, a hole
+// that cannot be swallowed, and a jump to any area.
+const ADMINW = { print: 'f5fbd99c8a9a458d2267847deb9aab64fd2f699c0746cea014e74f8cc48e6ee5' };
+let typed = '';
+async function isAdminWord(v) {
+  if (!v || v.length > 40 || !(window.crypto && crypto.subtle)) return false;
+  try { const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('retroRack:' + v.trim().toLowerCase())); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('') === ADMINW.print; } catch (e) { return false; }
+}
+let verTimer = 0;
+function setAdmin(on) {
+  if (profileDirty) saveProfile();                                // anything unsaved in the profile in use now is kept before the other one is loaded
+  ADMIN = !!on; GOD = false;
+  try { localStorage.setItem('retroHole.admin', ADMIN ? '1' : '0'); } catch (e) {}
+  PROFILE = loadProfile(); applySkin();
+  showTitle();
+  $('#ver').textContent = ADMIN ? 'Admin mode on: a test profile and test saves are in use.' : 'Admin mode off: your own profile and saves are back.';
+  clearTimeout(verTimer); verTimer = setTimeout(() => { $('#ver').textContent = verText(); }, 4000);
+}
+addEventListener('keydown', async e => {                          // every key typed on the title screen goes into a short buffer; any ending of it may be the word
+  if (state !== 'title' || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || !$('#settings').hidden || !$('#skins').hidden) return;
+  typed = (typed + e.key).slice(-40);
+  const s = typed;
+  for (let i = 0; i < s.length; i++) if (await isAdminWord(s.slice(i))) { if (state === 'title' && typed === s) { typed = ''; setAdmin(!ADMIN); } return; }
+});
+const AREAS = Object.keys(W.BIOMES);
+function findArea(area) {                                         // the nearest point of an area, searching outwards in rings
+  for (let rho = 0; rho < 40000; rho += Math.max(30, rho * 0.08)) {
+    const n = Math.max(1, Math.ceil(2 * Math.PI * rho / 50));
+    for (let k = 0; k < n; k++) { const a = k / n * 6.2832, x = H.x + rho * Math.cos(a), z = H.z + rho * Math.sin(a); if (W.biomeAt(x, z) === area) return { x, z }; }
+  }
+  return null;
+}
+function jumpTo(x, z) { H.x = x; H.z = z; H.vx = H.vz = 0; rebuildWorld(); save(); }
+function adminSetLevel(L) {
+  L = clamp(Math.floor(+L) || 1, 1, W.MAXLV === Infinity ? 100000 : W.MAXLV);
+  setXp(W.cum(L)); H.r = H.rt; H.best = Math.max(H.best, L); lastHud = ''; rebuildWorld(); save();   // the cells are made again for the new size (cells made for a much bigger hole lack the small things)
+  return L;
+}
+function renderAdmin() {
+  const go = $('#adGo'); go.textContent = '';
+  for (const a of AREAS) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = W.BIOMES[a].name; b.dataset.area = a; b.onclick = () => { const f = findArea(a); if (!f) { toast('No ' + W.BIOMES[a].name + ' found', 1.6); return; } closeAdmin(); jumpTo(f.x, f.z); closePause(); toast(W.BIOMES[a].name, 1.4); }; go.appendChild(b); }
+  const s = document.createElement('button'); s.type = 'button'; s.className = 'btn'; s.textContent = 'Start'; s.dataset.area = 'start'; s.onclick = () => { closeAdmin(); jumpTo(0, 0); closePause(); }; go.appendChild(s);
+  for (const b of $('#adGod').children) b.setAttribute('aria-pressed', String((b.dataset.v === '1') === GOD));
+  $('#adLevel').max = W.MAXLV === Infinity ? 100000 : W.MAXLV; $('#adLevel').value = H.level;
+}
+function openAdmin() { if (!ADMIN) return; $('#admin').hidden = false; renderAdmin(); }
+function closeAdmin() { $('#admin').hidden = true; }
+$('#bAdmin').onclick = openAdmin; $('#bAdminClose').onclick = closeAdmin;
+$('#adSetLevel').onclick = () => { $('#adLevel').value = adminSetLevel($('#adLevel').value); sfx('ui'); };
+$('#adLevel').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') $('#adSetLevel').click(); if (e.key === 'Escape') closeAdmin(); });
+$('#adCoins').onclick = () => { earnCoins(100000); sfx('level'); };
+for (const b of $('#adGod').children) b.onclick = () => { GOD = b.dataset.v === '1'; renderAdmin(); sfx('ui'); };
 $('#bPlay').onclick = () => startGame(false);
 $('#bNew').onclick = () => startGame(true);
 $('#bQuick').onclick = () => startGame(false, 'quick');
@@ -912,7 +982,8 @@ $('#bQuit').onclick = showTitle; $('#bHome').onclick = returnToStart;
 document.addEventListener('visibilitychange', () => { if (document.hidden) { save(); if (state === 'play') openPause(); } });
 addEventListener('pagehide', save);
 addEventListener('resize', () => { resize(); lastHud = ''; });
-$('#ver').textContent = 'Version ' + BUILD;
+const verText = () => 'Version ' + BUILD + (ADMIN ? '  /  Admin mode' : '');
+$('#ver').textContent = verText();
 
 // ------------------------------------------------------------------ the screen's numbers
 let lastHud = '';
@@ -965,7 +1036,7 @@ window.__rh = {
   wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; }, BOTS, get active() { return ACTIVE; }, get dying() { return dyingBots; }, VIS, UN,
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
-  get mode() { return MODE; }, get profile() { return PROFILE; }, K, openSkins, closeSkins, saveProfile, applySkin, earnCoins, get bits() { return bitsLive; }, spawnBits, COIN_TY, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
+  get mode() { return MODE; }, ADMINW, get admin() { return ADMIN; }, get god() { return GOD; }, openAdmin, closeAdmin, adminSetLevel, findArea, isAdminWord, get profile() { return PROFILE; }, K, openSkins, closeSkins, saveProfile, applySkin, earnCoins, get bits() { return bitsLive; }, spawnBits, COIN_TY, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
   teleport(x, z) { H.x = x; H.z = z; H.vx = H.vz = 0; plan(); makeCells(1000); },
   setXp(xp) { setXp(xp); H.r = H.rt; },
   nearestEdible(re) {                                              // the nearest thing the hole can eat (only types matching re, if given)

@@ -62,7 +62,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #titleBtns{display:grid;grid-template-columns:1fr;gap:10px;min-width:260px}
 #how{font-size:20px;opacity:.85;max-width:44ch}
 #ver{position:fixed;left:0;right:0;bottom:6px;text-align:center;font-size:17px;opacity:.55}
-#skins .ovPanel{width:min(760px,96vw);max-height:calc(100vh - 44px);gap:8px}
+#skins .ovPanel{width:min(760px,100%);max-height:calc(100vh - 44px);gap:8px}
 #skHead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 #skHead h2{margin:0}
 #skCoins{font-size:22px;color:var(--lamp)}
@@ -77,6 +77,11 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #skStats{display:grid;grid-template-columns:1fr 1fr;gap:8px;overflow:auto;min-height:0;touch-action:pan-y}
 #skStats .skCard{flex-direction:column;align-items:flex-start;gap:2px;font-size:20px}
 #skStats b{font-weight:400;color:var(--lamp)}
+#admin,#skins{background:rgba(13,10,28,.6)}
+#admin .ovPanel,#skins .ovPanel{background:#16112c}
+#admin .ovPanel{width:min(600px,100%);max-height:calc(100vh - 44px);overflow:auto;touch-action:pan-y;gap:8px}
+#adLevel{width:110px;font-family:'VT323',ui-monospace,monospace;font-size:22px;color:var(--paper);background:var(--night);border:3px solid var(--plum2);padding:3px 6px;-webkit-user-select:text;user-select:text}
+#admin .row{margin:0}
 #pause{background:rgba(13,10,28,.55)}
 .ovPanel{width:min(420px,94vw);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
 .ovPanel h2{margin:0 0 4px;font-family:'Press Start 2P',monospace;font-weight:400;font-size:13px;color:var(--lamp)}
@@ -104,7 +109,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
   <div id="coinPop"></div>
   <div id="top">
     <button id="bMenu" class="btn" type="button">Menu</button>
-    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span><span id="wMode" hidden><br>Quick Mode</span></div>
+    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span><span id="wMode" hidden><br>Quick Mode</span><span id="wAdmin" hidden><br>Admin</span></div>
   </div>
   <div id="board" class="panel" hidden></div>
   <div id="labels"></div>
@@ -135,6 +140,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <button id="bResume" class="btn main" type="button">Resume</button>
     <button id="bHome" class="btn" type="button">Return to Start</button>
     <button id="bSkins2" class="btn" type="button">Skins</button>
+    <button id="bAdmin" class="btn" type="button" hidden>Admin</button>
     <button id="bSet2" class="btn" type="button">Settings</button>
     <button id="bQuit" class="btn" type="button">Quit to Title</button>
   </div>
@@ -155,6 +161,16 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <div id="skGrid"></div>
     <div id="skStats" hidden></div>
     <button id="bSkinsClose" class="btn main" type="button">Close</button>
+  </div>
+</div>
+<div id="admin" class="overlay" hidden>
+  <div class="ovPanel panel">
+    <h2>Admin</h2>
+    <div class="row"><div class="lbl">Level</div><div class="seg"><input id="adLevel" type="number" min="1" step="1" value="1" aria-label="Level"><button id="adSetLevel" class="btn" type="button">Set</button></div></div>
+    <div class="row"><div class="lbl">Coins</div><div class="seg"><button id="adCoins" class="btn" type="button">Add 100,000</button></div></div>
+    <div class="row"><div class="lbl">Can't Be Swallowed</div><div class="seg" id="adGod"><button class="btn" type="button" data-v="1">On</button><button class="btn" type="button" data-v="0">Off</button></div></div>
+    <div class="row"><div class="lbl">Go To</div><div class="seg" id="adGo"></div></div>
+    <button id="bAdminClose" class="btn main" type="button">Close</button>
   </div>
 </div>
 <div id="ver"></div>

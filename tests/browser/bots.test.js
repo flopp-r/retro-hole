@@ -85,6 +85,11 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
   await p.click('#bPlay'); await frames(p, 6);
   ok(await p.evaluate(() => __rh.BOTS.length >= 2 && __rh.H.prot > 5), 'and they are there again, with protection, when you continue');
 
+  // Return to Start from the menu keeps the bots round the start (they were only made while the game was 'play', not 'pause')
+  await p.evaluate(() => { __rh.teleport(3000, 3000); }); await frames(p, 4);
+  await p.evaluate(() => __rh.pause()); await p.click('#bHome'); await frames(p, 6);
+  ok(await p.evaluate(() => __rh.state === 'play' && __rh.BOTS.length >= 2), 'Return to Start from the menu leaves the bots round the start in place (' + await p.evaluate(() => __rh.BOTS.length) + ')');
+
   // the board and labels fit a phone on its side and upright
   for (const [w, h] of [[390, 760], [760, 340], [1280, 720]]) {
     await p.setViewportSize({ width: w, height: h }); await frames(p, 4);
