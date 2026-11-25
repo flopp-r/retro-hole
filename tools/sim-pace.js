@@ -14,7 +14,7 @@ const rows = [];
 const timeForLevel = L => {                              // minutes to get from level L to L + 1
   const r = W.radiusAt(L, 0.5), S = QUICKMODE ? 1 : Math.max(1, r / W.R0), d = QUICKMODE ? 700 : W.D0 * (S - 1) + 20;
   const t = W.tierOf(d), C = W.cellSize(t);
-  let area = 0, n = 0, xp = 0;
+  let area = 0, n = 0, xp = 0, nCoin = 0;
   for (const biome of Object.keys(W.BIOMES)) {   // up to 8 cells of each area at that ring
     let got = 0;
     for (let k = 0; k < 360 && got < 6; k++) {
@@ -22,30 +22,31 @@ const timeForLevel = L => {                              // minutes to get from 
       if (W.biomeAt(x, z) !== biome) continue;
       const c = W.genCell(t, Math.floor(x / C), Math.floor(z / C), r * 0.05);
       area += C * C; got++;
-      for (const o of c.objs) if (W.canEat(o.r, r)) { n++; xp += W.xpFor(o.r, r); }
+      for (const o of c.objs) if (W.canEat(o.r, r)) { n++; xp += W.xpFor(o.r, r); if (o.ty === W.BYID.coin.i) nCoin++; }
     }
   }
   const dens = n / Math.max(area, 1), perSec = dens * 2 * r * SPEED * r * eff, xpPerSec = (xp / Math.max(n, 1)) * perSec;
-  return { min: W.need(L) / xpPerSec / 60, perSec, meanXp: xp / Math.max(n, 1), dens };
+  const foundPerMin = nCoin / Math.max(area, 1) * 2 * r * SPEED * r * eff * 60 * W.foundPay(r);   // coins a minute from coins found on the map
+  return { min: W.need(L) / xpPerSec / 60, perSec, meanXp: xp / Math.max(n, 1), dens, foundPerMin, levelPerMin: W.levelPay(L) / (W.need(L) / xpPerSec / 60) };
 };
 const out = [];
-let tot = 0;
+let tot = 0, coinTot = 0;
 if (QUICKMODE) {                                         // no cap: time to reach each level, sampling every tenth level
   const marks = [1, 5, 10, 25, 50, 100, 200, 300, 500, 1000];
   let reached = {};
   for (let L = 1; L <= 1000; L += 10) {
     const a = timeForLevel(L), step = L === 1 ? 10 : 10;
-    for (let k = 0; k < step; k++) { const lv = L + k; if (marks.includes(lv)) reached[lv] = { min: tot, r: W.radiusAt(lv, 0), perSec: a.perSec, meanXp: a.meanXp, minPerLevel: a.min }; tot += a.min; }
+    for (let k = 0; k < step; k++) { const lv = L + k; if (marks.includes(lv)) reached[lv] = { min: tot, r: W.radiusAt(lv, 0), perSec: a.perSec, meanXp: a.meanXp, minPerLevel: a.min, coins: coinTot, lp: a.levelPerMin, fp: a.foundPerMin }; tot += a.min; coinTot += W.levelPay(lv); }
   }
-  console.log('QUICK MODE   level  hole width   things/s  mean xp  min/level   minutes to get here   (efficiency ' + eff + ')');
-  for (const m of marks) { const o = reached[m]; if (o) console.log(String(m).padStart(18), W.fmtLen(2 * o.r).padStart(10), o.perSec.toFixed(2).padStart(10), o.meanXp.toFixed(3).padStart(8), o.minPerLevel.toFixed(3).padStart(10), o.min.toFixed(1).padStart(14)); }
+  console.log('QUICK MODE   level  hole width   things/s  mean xp  min/level   minutes to get here   coins so far  coins/min: levels, found   (efficiency ' + eff + ')');
+  for (const m of marks) { const o = reached[m]; if (o) console.log(String(m).padStart(18), W.fmtLen(2 * o.r).padStart(10), o.perSec.toFixed(2).padStart(10), o.meanXp.toFixed(3).padStart(8), o.minPerLevel.toFixed(3).padStart(10), o.min.toFixed(1).padStart(14), Math.round(o.coins).toString().padStart(12), (Math.round(o.lp) + ', ' + Math.round(o.fp)).padStart(14)); }
   process.exit(0);
 }
 for (let L = 1; L < W.MAXLV; L++) {
   const a = timeForLevel(L);
-  tot += a.min;
-  if (levels.includes(L)) out.push({ L, r: W.radiusAt(L, 0), width: 2 * W.radiusAt(L, 0), perSec: a.perSec, meanXp: a.meanXp, minPerLevel: a.min, hoursSoFar: tot / 60 });
+  tot += a.min; coinTot += W.levelPay(L);
+  if (levels.includes(L)) out.push({ L, coins: coinTot, lp: a.levelPerMin, fp: a.foundPerMin, r: W.radiusAt(L, 0), width: 2 * W.radiusAt(L, 0), perSec: a.perSec, meanXp: a.meanXp, minPerLevel: a.min, hoursSoFar: tot / 60 });
 }
-console.log('level  hole width   things/s  mean xp  min/level  hours so far   (efficiency ' + eff + ')');
-for (const o of out) console.log(String(o.L).padStart(5), W.fmtLen(o.width).padStart(10), o.perSec.toFixed(2).padStart(10), o.meanXp.toFixed(3).padStart(8), o.minPerLevel.toFixed(2).padStart(10), o.hoursSoFar.toFixed(2).padStart(13));
+console.log('level  hole width   things/s  mean xp  min/level  hours so far  coins so far  coins/min: levels, found   (efficiency ' + eff + ')');
+for (const o of out) console.log(String(o.L).padStart(5), W.fmtLen(o.width).padStart(10), o.perSec.toFixed(2).padStart(10), o.meanXp.toFixed(3).padStart(8), o.minPerLevel.toFixed(2).padStart(10), o.hoursSoFar.toFixed(2).padStart(13), Math.round(o.coins).toString().padStart(12), (Math.round(o.lp) + ', ' + Math.round(o.fp)).padStart(14));
 console.log('whole climb to level ' + W.MAXLV + ': about ' + tot.toFixed(0) + ' minutes (' + (tot / 60).toFixed(1) + ' hours)');

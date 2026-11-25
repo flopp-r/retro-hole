@@ -33,11 +33,15 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #xpBar{height:12px;margin-top:6px;background:var(--ink);border:3px solid var(--ink);outline:2px solid var(--plum2)}
 #xpFill{display:block;height:100%;width:0;background:var(--mint)}
 #lvSub{display:flex;justify-content:space-between;margin-top:5px;font-size:19px;opacity:.85}
+#lvSub2{display:flex;justify-content:space-between;margin-top:1px;font-size:19px;opacity:.85}
+#lvCoins{color:var(--lamp)}
+#coinPop{left:calc(max(14px,env(safe-area-inset-left)) + min(300px,52vw) + 8px);top:calc(max(12px,env(safe-area-inset-top)) + 70px);font-family:'Press Start 2P',monospace;font-size:12px;color:var(--lamp);text-shadow:2px 2px 0 var(--ink);white-space:nowrap;opacity:0;transition:opacity .3s}
+#coinPop.on{opacity:1}
 #top{right:max(14px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 #top .btn{pointer-events:auto}
 #where{padding:6px 10px;font-size:20px;text-align:right;line-height:1.1}
 #where b{font-weight:400;color:var(--lamp)}
-#board{left:max(14px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 106px);padding:6px 10px;font-size:19px;line-height:1.05;min-width:150px;opacity:.92}
+#board{left:max(14px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 130px);padding:6px 10px;font-size:19px;line-height:1.05;min-width:150px;opacity:.92}
 #board .you{color:var(--lamp)}
 #labels{position:absolute;inset:0;overflow:hidden}
 .botLabel{position:absolute;transform:translate(-50%,-100%);padding:1px 5px;font-size:18px;line-height:1;white-space:nowrap;background:rgba(13,10,28,.72);border:2px solid var(--ink);text-shadow:1px 1px 0 var(--ink)}
@@ -58,6 +62,21 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #titleBtns{display:grid;grid-template-columns:1fr;gap:10px;min-width:260px}
 #how{font-size:20px;opacity:.85;max-width:44ch}
 #ver{position:fixed;left:0;right:0;bottom:6px;text-align:center;font-size:17px;opacity:.55}
+#skins .ovPanel{width:min(760px,96vw);max-height:calc(100vh - 44px);gap:8px}
+#skHead{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+#skHead h2{margin:0}
+#skCoins{font-size:22px;color:var(--lamp)}
+#skGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;overflow:auto;min-height:0;touch-action:pan-y;padding:2px}
+.skCard{display:flex;gap:10px;align-items:center;padding:6px 8px;background:var(--night);border:3px solid var(--plum2)}
+.skCard canvas{width:56px;height:56px;flex:none;image-rendering:pixelated;background:#0d0a1c}
+.skInfo{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:0}
+.skName{font-size:21px;line-height:1}
+.skRar{font-size:17px;opacity:.9}
+.skCard .btn{font-size:8px;padding:5px 8px}
+.skCard .btn:disabled{opacity:.45;cursor:default}
+#skStats{display:grid;grid-template-columns:1fr 1fr;gap:8px;overflow:auto;min-height:0;touch-action:pan-y}
+#skStats .skCard{flex-direction:column;align-items:flex-start;gap:2px;font-size:20px}
+#skStats b{font-weight:400;color:var(--lamp)}
 #pause{background:rgba(13,10,28,.55)}
 .ovPanel{width:min(420px,94vw);padding:16px 18px;display:flex;flex-direction:column;gap:10px}
 .ovPanel h2{margin:0 0 4px;font-family:'Press Start 2P',monospace;font-weight:400;font-size:13px;color:var(--lamp)}
@@ -68,7 +87,8 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 .seg .btn{font-size:9px;padding:7px 9px}
 .note{font-size:18px;opacity:.75}
 @media (max-width:560px){.row{grid-template-columns:1fr}}
-@media (max-height:420px){#titleBtns{grid-template-columns:1fr 1fr;min-width:0}#how{display:none}#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px;max-width:none}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
+@media (max-width:420px){#lvl{width:50vw}#where{font-size:18px;padding:5px 8px}}
+@media (max-height:420px){#skins .ovPanel{padding:10px 12px}.skCard canvas{width:44px;height:44px}.skName{font-size:19px}#titleBtns{grid-template-columns:1fr 1fr;min-width:0}#how{display:none}#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px;max-width:none}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
 </style>
 </head>
 <body>
@@ -79,7 +99,9 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <div id="lvTop"><span id="lvNum">Level 1</span><span id="lvSize">1.0 m</span></div>
     <div id="xpBar"><i id="xpFill"></i></div>
     <div id="lvSub"><span id="lvEaten">Eaten 0</span><span id="lvNext"></span></div>
+    <div id="lvSub2"><span id="lvKD">Kills 0 / Deaths 0</span><span id="lvCoins">0 coins</span></div>
   </div>
+  <div id="coinPop"></div>
   <div id="top">
     <button id="bMenu" class="btn" type="button">Menu</button>
     <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span><span id="wMode" hidden><br>Quick Mode</span></div>
@@ -101,6 +123,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
       <button id="bQuick" class="btn" type="button">Quick Game</button>
       <button id="bQuickNew" class="btn" type="button" hidden>New Quick Game</button>
       <button id="bSet" class="btn" type="button">Settings</button>
+      <button id="bSkins" class="btn" type="button">Skins</button>
     </div>
     <div id="how">Steer with the mouse, WASD or the arrow keys, or touch and drag. Press M to turn mouse steering off. Eat anything smaller than your hole.<br>Quick Game: everything is one size everywhere and you grow extremely fast, with no level cap.</div>
   </div>
@@ -111,6 +134,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <h2>Menu</h2>
     <button id="bResume" class="btn main" type="button">Resume</button>
     <button id="bHome" class="btn" type="button">Return to Start</button>
+    <button id="bSkins2" class="btn" type="button">Skins</button>
     <button id="bSet2" class="btn" type="button">Settings</button>
     <button id="bQuit" class="btn" type="button">Quit to Title</button>
   </div>
@@ -122,6 +146,15 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <div id="setRows"></div>
     <div class="note">Fewer pixels and fewer colours suit slower devices.</div>
     <button id="bSetClose" class="btn main" type="button">Close</button>
+  </div>
+</div>
+<div id="skins" class="overlay" hidden>
+  <div class="ovPanel panel">
+    <div id="skHead"><h2>Skins</h2><span id="skCoins"></span></div>
+    <div id="skTabs" class="seg"></div>
+    <div id="skGrid"></div>
+    <div id="skStats" hidden></div>
+    <button id="bSkinsClose" class="btn main" type="button">Close</button>
   </div>
 </div>
 <div id="ver"></div>

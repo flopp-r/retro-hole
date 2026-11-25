@@ -283,5 +283,29 @@ ok(W.cum(10) < 1.5 && W.cum(100) < 25 && W.need(1) < 0.2, 'levels need very litt
 W.setMode('normal');
 ok(W.getMode() === 'normal' && W.MAXLV === 1000 && W.scaleAt(120) === 2 && W.cellSize(2) === 128, 'switching back to normal mode gives the normal world again');
 
+// -- coins: on the map, and what a hole earns
+{ const coin = W.BYID.coin;
+  ok(coin && coin.b < 0.2 && coin.from === 0 && W.canEat(coin.b * 0.85, W.R0), 'a gold coin is small and from the start, and a level 1 hole can swallow it');
+  const perCell = (mode) => { W.setMode(mode); let n = 0, cells = 0, bad = 0, others = 0; for (let i = -6; i < 6; i++) for (let j = -6; j < 6; j++) { const cell = W.genCell(0, i, j, 0), c = W.cellInfo(0, i, j), d = Math.hypot(c.cx, c.cz); if (mode === 'normal' && d > 80) continue; cells++; for (const o of cell.objs) { if (o.ty === coin.i) { n++; if (o.state !== 0 || !(o.r > 0.1)) bad++; } else others++; } } return { n, cells, bad }; };
+  const nm = perCell('normal'), qk = perCell('quick');
+  ok(nm.n / nm.cells > 0.5 && nm.n / nm.cells < 4 && qk.n / qk.cells > 0.5 && qk.n / qk.cells < 6 && nm.bad === 0, 'about one or two coins in a plot (' + (nm.n / nm.cells).toFixed(2) + ' normal, ' + (qk.n / qk.cells).toFixed(2) + ' quick)');
+  W.setMode('normal');
+  // coins are put down last, so a cell without them is exactly what it was
+  const noCoin = (cell) => cell.objs.filter(o => o.ty !== coin.i).map(o => [o.ty, o.x.toFixed(6), o.z.toFixed(6), o.s.toFixed(6)].join()).join('|');
+  const again = noCoin(W.genCell(0, 3, -2, 0)) === noCoin(W.genCell(0, 3, -2, 0)), cutOk = (() => { const full = W.genCell(1, 4, 2, 0), cut = W.genCell(1, 4, 2, 0.3); const keep = full.objs.filter(o => o.r >= 0.3).map(o => o.ty + ':' + o.x.toFixed(5) + ':' + o.z.toFixed(5)).sort().join('|'); return cut.objs.map(o => o.ty + ':' + o.x.toFixed(5) + ':' + o.z.toFixed(5)).sort().join('|') === keep; })();
+  ok(again && cutOk, 'coins do not break the rules for a cell: the same each time, and leaving out small things leaves the rest as it was');
+  // pay
+  W.setMode('normal');
+  let up = true; for (let L = 1; L < 1000; L++) if (W.levelPay(L + 1) < W.levelPay(L)) up = false;
+  ok(up && W.levelPay(1) === 1 && W.levelPay(100) === 21 && W.levelPay(1000) === 201, 'a level pays more the higher it is (1 coin at level 1, 21 at 100, 201 at 1,000)');
+  ok(W.foundPay(W.R0) === 10 && W.foundPay(W.radiusAt(100, 0)) === 55 && W.foundPay(W.radiusAt(1000, 0)) === 160, 'a coin found pays more for a bigger hole (10, 55 and 160 coins)');
+  ok(W.sizeLevel(W.radiusAt(250, 0)) === 250 && W.sizeLevel(0.1) === 1 && W.sizeLevel(1e9) === 1000, 'the size level of a normal hole is its level');
+  ok(W.killPay(W.radiusAt(50, 0), 0) === 55 && W.killPay(W.radiusAt(50, 0), 1) === 27.5 && W.killPay(W.radiusAt(50, 0), 3) === 13.75, 'a bot swallowed pays 5 plus its size level, less each time the same bot is swallowed again');
+  W.setMode('quick');
+  ok(W.levelPay(100) === 0.21 && W.levelPay(1000) < 3 && W.foundPay(W.R0) === 1, 'in Quick Game a level pays 1/100 and a coin found 1/10 of what they do in the normal game');
+  { let total = 0; for (let L = 1; L <= 1000; L++) total += W.levelPay(L); W.setMode('normal'); let totalN = 0; for (let L = 1; L <= 1000; L++) totalN += W.levelPay(L);
+    ok(total > 500 && total < 1500 && totalN > 90000, 'all 1,000 levels pay about ' + Math.round(total) + ' coins in Quick Game (16 minutes) and ' + totalN + ' in the normal game (about 20 hours)'); } }
+W.setMode('normal');
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

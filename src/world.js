@@ -279,6 +279,9 @@ def('volcano', 'charredtree', 'Charred Tree', 0.8, 0, [P(2, 10, 2, '#1a1618'), P
 def('volcano', 'smokestack', 'Smokestack', 1.0, 0, [P(6, 14, 6, '#3a3438'), P(4, 3, 4, ASH, 0, 14, 0), P(3, 4, 3, '#6a6a72', 0, 17, 0)]);
 def('volcano', 'anvil', 'Anvil', 0.2, 0, [P(4, 2, 3, '#2a2a33'), P(6, 1, 3, '#2a2a33', 0, 2, 0), P(2, 1, 2, '#2a2a33', -3, 2, 0)]);
 
+// -- coins: a few in every plot, put down after the layout so nothing else moves; a hole swallowing one is paid (see COINS)
+def('all', 'coin', 'Gold Coin', 0.14, 0, [P(5, 5, 1.2, '#c98f12'), P(3.4, 3.4, 1.6, '#ffd84a', 0, 0.8, 0), P(1.2, 1.2, 2, '#fff2a8', 0, 1.8, 0)]);
+
 TYPES.sort((a, b) => b.b - a.b);                                  // biggest first: they are placed first, the small fill the gaps
 TYPES.forEach((t, i) => { t.i = i; });
 const BIGGEST = TYPES[0].b;
@@ -986,12 +989,28 @@ function botSpec(c) {
   return { id: c.key, x, z, r: R0 * botScale(d) * m, name: BOT_NAMES[Math.floor(pn * BOT_NAMES.length)], colour: BOT_COLOURS[Math.floor(pc * BOT_COLOURS.length)], aggr: 0.4 + 0.6 * pa };
 }
 
+// ------------------------------------------------------------------ coins
+// What a hole earns. A level pays 1 coin plus 1 for every 5 levels, so higher levels pay more; Quick Game's levels come
+// about 100 times faster, so there a level pays 1/100 of that. A coin on the map pays 5 plus 5 times the square root of
+// the hole's size level (10 coins for a new hole, 55 at level 100), a tenth of it in Quick Game (there the hole passes a coin every second or so while small). A bot
+// swallowed pays 5 plus its own size level, less each time the same bot is swallowed again (it comes back after 25 s).
+// "Size level" is the normal-game level of a hole that wide (`sizeLevel`), so Quick Game's big holes pay by size.
+const COINS = { PER100: 0.16, LEVEL_EVERY: 5, QUICK_LEVEL: 0.01, QUICK_FOUND: 0.1, KILL: 5 };
+const sizeLevel = r => r <= R0 ? 1 : Math.min(1000, 1 + Math.floor(Math.pow(Math.log(r / R0) / Math.log(REACH), 1 / CURVE) * 999 + 1e-6));
+const levelPay = level => (1 + Math.floor(level / COINS.LEVEL_EVERY)) * (quick() ? COINS.QUICK_LEVEL : 1);
+const foundPay = holeR => (5 + 5 * Math.floor(Math.sqrt(sizeLevel(holeR)))) * (quick() ? COINS.QUICK_FOUND : 1);
+const killPay = (victimR, timesBefore = 0) => (COINS.KILL + sizeLevel(victimR)) / (1 + timesBefore);
+
 // ------------------------------------------------------------------ making a cell
 // A cell is made from the seed alone, so it is the same each time it is made. cull: leave out things smaller than
 // this radius (they would be specks next to the hole); the rest are exactly as they would be without it.
 function genCell(t, i, j, cull = 0) {
   const c = cellInfo(t, i, j), ctx = makeCtx(c, cull);
   LAYOUTS[c.biome][c.kind](ctx);
+  {                                                                  // coins go last, so every other thing stands exactly where it did; the plots are full, so each coin tries many places
+    const rn = rng(hash(SEED, c.t, c.i, c.j, 4242)), ci = c.inner, want = COINS.PER100 * DENSITY / 100 * (ci.x1 - ci.x0) * (ci.z1 - ci.z0) / (ctx.Sc * ctx.Sc), n = Math.floor(want + rn());
+    for (let k = 0; k < n; k++) for (let tries = 0; tries < 60; tries++) if (ctx.add('coin', ci.x0 + rn() * (ci.x1 - ci.x0), ci.z0 + rn() * (ci.z1 - ci.z0), {}, rn)) break;
+  }
   const objs = ctx.objs.filter(o => !o.ghost);
   let maxR = 0;
   for (const o of objs) if (o.r > maxR) maxR = o.r;
@@ -1042,6 +1061,7 @@ return {
   D0, R0, REACH, CURVE, C0, EAT_MAX, SPAWN_CLEAR, CUM, cum, QUICK, botScale, setMode, getMode,
   get MAXLV() { return maxLv(); }, get MAXXP() { return maxXp(); },
   scaleAt, tierOf, tierRange, cellSize, setSeed, getSeed, hash, rng,
+  COINS, sizeLevel, levelPay, foundPay, killPay,
   need, progress, radiusAt, xpFor, xpForRadius, canEat, swallowDist, BOT_NAMES, BOT_COLOURS, botSpec,
   BIOMES, STYLES, FACE, LANE, yawOf, biomeAt, cellInfo, cellAt, groundColour, polar, LAYOUTS,
   TYPES, BIGGEST, BYID, byId, model, genCell, wantedCells, fmtLen,
