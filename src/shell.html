@@ -33,6 +33,9 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #xpBar{height:12px;margin-top:6px;background:var(--ink);border:3px solid var(--ink);outline:2px solid var(--plum2)}
 #xpFill{display:block;height:100%;width:0;background:var(--mint)}
 #lvSub{display:flex;justify-content:space-between;margin-top:5px;font-size:19px;opacity:.85}
+#wMode,#wAdmin,#wTime{display:block}
+#wTime{font-family:'Press Start 2P',monospace;font-size:11px;margin-top:3px;color:var(--mint)}
+#wTime.low{color:var(--rose)}
 #lvSub2{display:flex;justify-content:space-between;margin-top:1px;font-size:19px;opacity:.85}
 #lvCoins{color:var(--lamp)}
 #coinPop{left:calc(max(14px,env(safe-area-inset-left)) + min(300px,52vw) + 8px);top:calc(max(12px,env(safe-area-inset-top)) + 70px);font-family:'Press Start 2P',monospace;font-size:12px;color:var(--lamp);text-shadow:2px 2px 0 var(--ink);white-space:nowrap;opacity:0;transition:opacity .3s}
@@ -77,8 +80,17 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #skStats{display:grid;grid-template-columns:1fr 1fr;gap:8px;overflow:auto;min-height:0;touch-action:pan-y}
 #skStats .skCard{flex-direction:column;align-items:flex-start;gap:2px;font-size:20px}
 #skStats b{font-weight:400;color:var(--lamp)}
-#admin,#skins{background:rgba(13,10,28,.6)}
-#admin .ovPanel,#skins .ovPanel{background:#16112c}
+#admin,#skins,#modes,#over{background:rgba(13,10,28,.6)}
+#admin .ovPanel,#skins .ovPanel,#modes .ovPanel,#over .ovPanel{background:#16112c}
+#modes .ovPanel{width:min(760px,100%);max-height:calc(100vh - 44px);gap:8px}
+#mdGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px;overflow:auto;min-height:0;touch-action:pan-y;padding:2px}
+.mdHead{grid-column:1 / -1;font-size:19px;color:var(--lamp);margin-top:2px}
+.mdCard{padding:5px 8px;align-items:flex-start}
+.mdCard .skRar{font-size:16px;line-height:1}
+.mdCard .skInfo{width:100%}
+.mdBtns{display:flex;flex-wrap:wrap;gap:6px}
+#ovLines{display:flex;flex-direction:column;gap:2px;font-size:23px}
+#over{z-index:3}
 #admin .ovPanel{width:min(600px,100%);max-height:calc(100vh - 44px);overflow:auto;touch-action:pan-y;gap:8px}
 #adLevel{width:110px;font-family:'VT323',ui-monospace,monospace;font-size:22px;color:var(--paper);background:var(--night);border:3px solid var(--plum2);padding:3px 6px;-webkit-user-select:text;user-select:text}
 #admin .row{margin:0}
@@ -109,7 +121,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
   <div id="coinPop"></div>
   <div id="top">
     <button id="bMenu" class="btn" type="button">Menu</button>
-    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span><span id="wMode" hidden><br>Quick Mode</span><span id="wAdmin" hidden><br>Admin</span></div>
+    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span><span id="wMode" hidden></span><span id="wAdmin" hidden>Admin</span><span id="wTime" hidden></span></div>
   </div>
   <div id="board" class="panel" hidden></div>
   <div id="labels"></div>
@@ -127,8 +139,9 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
       <button id="bNew" class="btn" type="button" hidden>New Game</button>
       <button id="bQuick" class="btn" type="button">Quick Game</button>
       <button id="bQuickNew" class="btn" type="button" hidden>New Quick Game</button>
-      <button id="bSet" class="btn" type="button">Settings</button>
+      <button id="bModes" class="btn" type="button">Modes</button>
       <button id="bSkins" class="btn" type="button">Skins</button>
+      <button id="bSet" class="btn" type="button">Settings</button>
     </div>
     <div id="how">Steer with the mouse, WASD or the arrow keys, or touch and drag. Press M to turn mouse steering off. Eat anything smaller than your hole.<br>Quick Game: everything is one size everywhere and you grow extremely fast, with no level cap.</div>
   </div>
@@ -161,6 +174,21 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <div id="skGrid"></div>
     <div id="skStats" hidden></div>
     <button id="bSkinsClose" class="btn main" type="button">Close</button>
+  </div>
+</div>
+<div id="modes" class="overlay" hidden>
+  <div class="ovPanel panel">
+    <div id="skHead"><h2>Modes</h2></div>
+    <div id="mdGrid"></div>
+    <button id="bModesClose" class="btn main" type="button">Close</button>
+  </div>
+</div>
+<div id="over" class="overlay" hidden>
+  <div class="ovPanel panel">
+    <h2 id="ovTitle"></h2>
+    <div id="ovLines"></div>
+    <button id="bAgain" class="btn main" type="button">Play Again</button>
+    <button id="bOverQuit" class="btn" type="button">Quit to Title</button>
   </div>
 </div>
 <div id="admin" class="overlay" hidden>

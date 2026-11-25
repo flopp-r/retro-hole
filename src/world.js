@@ -354,7 +354,12 @@ function quickBiome(x, z) {                                       // quick mode:
   if ((bi === 0 || bi === -1) && (bj === 0 || bj === -1)) return 'village';
   return pickBiome(hash(SEED, bi, bj, 43) / TWO32);
 }
+// Single Area mode: the whole map is one area (setArea), everything else as in the normal game
+let AREA = null;
+const setArea = a => { AREA = a && BIOMES[a] ? a : null; INFO.clear(); };
+const getArea = () => AREA;
 function rawBiome(x, z) {
+  if (AREA) return AREA;
   if (quick()) return quickBiome(x, z);
   const d = Math.hypot(x, z), K = REGION.K, u = (Math.atan2(z, x) / (2 * Math.PI) + 0.5) * K, v = Math.log((d + REGION.FLOOR) / REGION.FLOOR) * REGION.R;
   const iu = Math.floor(u), iv = Math.floor(v);
@@ -384,8 +389,18 @@ function edgeRoad(t, axis, k, m) {
 }
 // the four cells round the start are fixed, so there are houses, animals and a green in sight from the first step
 const START_PLOTS = { '0:0': 'pasture', '-1:0': 'homestead', '0:-1': 'green', '-1:-1': 'homestead' };
+// In Single Area mode the four start plots are of that area, of kinds with plenty to eat and nothing in the way
+const AREA_START = {
+  forest: { '0:0': 'clearing', '-1:0': 'mixed', '0:-1': 'mixed', '-1:-1': 'clearing' },
+  city: { '0:0': 'park', '-1:0': 'built', '0:-1': 'plaza', '-1:-1': 'built' },
+  jurassic: { '0:0': 'jungle', '-1:0': 'nest', '0:-1': 'jungle', '-1:-1': 'jungle' },
+  desert: { '0:0': 'dunes', '-1:0': 'camp', '0:-1': 'dunes', '-1:-1': 'camp' },
+  arctic: { '0:0': 'snowfield', '-1:0': 'pinewood', '0:-1': 'snowfield', '-1:-1': 'outpost' },
+  volcano: { '0:0': 'ashfield', '-1:0': 'mine', '0:-1': 'ashfield', '-1:-1': 'forge' },
+};
 function plotKind(c) {
-  if (c.t === 0 && START_PLOTS[c.i + ':' + c.j]) return START_PLOTS[c.i + ':' + c.j];
+  if (c.t === 0 && AREA && AREA_START[AREA] && AREA_START[AREA][c.i + ':' + c.j]) return AREA_START[AREA][c.i + ':' + c.j];
+  if (c.t === 0 && START_PLOTS[c.i + ':' + c.j] && (!AREA || AREA === 'village')) return START_PLOTS[c.i + ':' + c.j];
   const h = hash(SEED, c.t, c.i, c.j, 7) / TWO32, d = Math.hypot(c.cx, c.cz);
   const choose = list => { let tot = 0; for (const e of list) tot += e[1]; let a = h * tot; for (const e of list) if ((a -= e[1]) < 0) return e[0]; return list[list.length - 1][0]; };
   if (c.biome === 'city') return choose([['built', 70], ['park', 14], ['plaza', 6], ['lot', 10]]);
@@ -1061,7 +1076,7 @@ return {
   D0, R0, REACH, CURVE, C0, EAT_MAX, SPAWN_CLEAR, CUM, cum, QUICK, botScale, setMode, getMode,
   get MAXLV() { return maxLv(); }, get MAXXP() { return maxXp(); },
   scaleAt, tierOf, tierRange, cellSize, setSeed, getSeed, hash, rng,
-  COINS, sizeLevel, levelPay, foundPay, killPay,
+  COINS, sizeLevel, levelPay, foundPay, killPay, setArea, getArea, AREA_START,
   need, progress, radiusAt, xpFor, xpForRadius, canEat, swallowDist, BOT_NAMES, BOT_COLOURS, botSpec,
   BIOMES, STYLES, FACE, LANE, yawOf, biomeAt, cellInfo, cellAt, groundColour, polar, LAYOUTS,
   TYPES, BIGGEST, BYID, byId, model, genCell, wantedCells, fmtLen,

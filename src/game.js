@@ -37,9 +37,10 @@ let PROFILE = loadProfile();
 let profileDirty = false;
 function saveProfile() { profileDirty = false; try { localStorage.setItem(profileKey(), JSON.stringify(PROFILE)); } catch (e) {} }
 let popSum = 0, popT = 0;
-function earnCoins(n) { if (!(n > 0)) return; K.earn(PROFILE, n); profileDirty = true; popSum += n; popT = 1.6; }
+function earnCoins(n, force) { if (!(n > 0) || (PLAY.pay !== 'full' && !force)) return; K.earn(PROFILE, n); profileDirty = true; popSum += n; popT = 1.6; }
 const coinText = n => n >= 10 ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
-const stat = () => PROFILE.stats[MODE];                          // this game's kills and deaths for good
+const NOSTAT = { kills: 0, deaths: 0 };
+const stat = () => PLAY.stat ? PROFILE.stats[PLAY.stat] : NOSTAT;   // this kind of game's kills and deaths for good (Peaceful has none)
 
 // ------------------------------------------------------------------ renderer + post
 // The scene is drawn small into a render target; a shader then adds outlines where the depth jumps, a vignette and, below
@@ -300,13 +301,13 @@ function updateGround() {
 // ------------------------------------------------------------------ cells: making and dropping the map round the hole
 const CELLS = new Map();
 let objTotal = 0, queue = [], planTimer = 0;
-const OBJ_BUDGET = 14000;
+let objBudget = 14000;                                            // the most things made at once (the arena needs its whole ring, so it raises this)
 function mount(c) {
   for (const o of c.objs) {
     const p = pool(o.ty); o.slot = p.alloc(); _q.setFromAxisAngle(Y, o.yaw); p.put(o.slot, o.x, 0, o.z, _q, o.s, o.br);
   }
   objTotal += c.objs.length; CELLS.set(c.key, c);
-  if (c.bot && state === 'play') BOTS.push(makeBot(c));          // a bot lives in its cell while the cell is loaded
+  if (c.bot && state === 'play' && PLAY.bots === 'cells') BOTS.push(makeBot(c));          // a bot lives in its cell while the cell is loaded
 }
 function unmount(c) {
   for (const o of c.objs) if (o.state < 2) { if (o.state === 1) dropFall(o); FADING.delete(o); o.fd = 0; o.fading = false; POOLS[o.ty].release(o.slot); o.state = 2; }
@@ -319,8 +320,8 @@ const cellDist = c => Math.hypot(H.x - Math.min(Math.max(H.x, c.x0), c.x0 + c.C)
 // that. Everything wanted is always kept (the keep list is the wanted list plus a margin), so a cell can never be made
 // and dropped again at the next look, which would regrow the things eaten there.
 function plan() {
-  const R = 32 * H.rt, cull = 0.05 * H.rt;
-  const want = W.wantedCells(H.x, H.z, R, cull), keep = new Set(W.wantedCells(H.x, H.z, R * 1.3, cull).map(c => c.t + ':' + c.i + ':' + c.j));
+  const R = ARENA ? ARENA.R + 8 : 32 * H.rt, cull = 0.05 * H.rt, cx = ARENA ? 0 : H.x, cz = ARENA ? 0 : H.z;   // the arena always has all of its ring, whatever the hole's size
+  const want = W.wantedCells(cx, cz, R, cull), keep = new Set(W.wantedCells(cx, cz, R * 1.3, cull).map(c => c.t + ':' + c.i + ':' + c.j));
   for (const c of want) keep.add(c.t + ':' + c.i + ':' + c.j);
   for (const c of [...CELLS.values()]) if (!keep.has(c.key)) unmount(c);
   queue = want.filter(c => !CELLS.has(c.t + ':' + c.i + ':' + c.j));
@@ -333,7 +334,7 @@ function makeCells(maxMs) {
   while (queue.length && (n === 0 || performance.now() - t0 < maxMs)) {
     const w = queue[0], key = w.t + ':' + w.i + ':' + w.j;
     if (CELLS.has(key)) { queue.shift(); continue; }
-    if (objTotal >= OBJ_BUDGET) {
+    if (objTotal >= objBudget) {
       let far = null, fd = -1;
       for (const c of CELLS.values()) { const d = cellDist(c); if (d > fd) { fd = d; far = c; } }
       if (!far || fd <= w.dist) break;
@@ -399,7 +400,7 @@ function startFall(o, c, h) {
   const f = { o, c, h, sx: o.x, sz: o.z, t: 0, T: clamp(0.35 + 0.22 * Math.sqrt(o.h / h.r), 0.35, 1.4), tilt: (Math.random() < 0.5 ? -1 : 1) * (0.35 + 0.5 * Math.random()) };
   o.fall = f; FALL.push(f);
   if (h === H) { gain(W.xpFor(o.r, H.r), o.r / H.r); if (state === 'play') { if (o.ty === COIN_TY) earnCoins(W.foundPay(H.r)); spawnBits(o.x, o.z); } }
-  else botGain(h, W.xpFor(o.r, h.r) * BOT_XP);
+  else botGain(h, W.xpFor(o.r, h.r) * botXp);
 }
 function dropFall(o) { const i = FALL.indexOf(o.fall); if (i >= 0) { FALL[i] = FALL[FALL.length - 1]; FALL.pop(); } o.fall = null; }
 function eatFor(h) {                                              // the player's hole and every bot eat by the same rule
@@ -504,15 +505,17 @@ function wander(dt, now) {
 // swallow that is near, flees from one that could swallow it, and otherwise goes for the juiciest thing it can eat.
 // A hole swallows another when it is at least about 8% wider and its middle is over it (the same rule as for things).
 // If a bot swallows you, you lose half your xp and come back a little way off, protected for a few seconds.
-const BOTS = [], MAXBOTS = MAXH - 1, BOT_XP = 0.2, RESPAWN = 25, BOT_SPEED = 0.6, BOT_CAP = 3;   // bots earn less xp a thing than you, and stop growing at BOT_CAP times the size their place suits
+const BOTS = [], MAXBOTS = MAXH - 1, BOT_XP = 0.2, RESPAWN = 25, BOT_SPEED = 0.6, BOT_CAP = 3;
+let botXp = BOT_XP, botSpeed = BOT_SPEED;                         // the arena's bots earn more and move faster (see ARENA)   // bots earn less xp a thing than you, and stop growing at BOT_CAP times the size their place suits
 let ACTIVE = [], boardT = 0, dyingBots = [];
 function botSetXp(b, xp) {                                        // a bot's level goes with its size, and stops at its cap: 1.4 times what the place suits near the start, BOT_CAP times further out
-  const d = Math.hypot(b.spec.x, b.spec.z), cap = Math.max(W.R0 * W.botScale(d) * (d < 150 ? 1.4 : BOT_CAP), b.spec.r);
+  const d = Math.hypot(b.spec.x, b.spec.z), cap = ARENA ? ARENA.cap : Math.max(W.R0 * W.botScale(d) * (d < 150 ? 1.4 : BOT_CAP), b.spec.r);
   b.xp = Math.min(xp, W.MAXXP, W.xpForRadius(cap)); const p = W.progress(b.xp); b.level = p.level; b.frac = p.frac; b.rt = W.radiusAt(p.level, p.frac);
 }
 function botGain(b, xp) { b.eaten++; botSetXp(b, b.xp + xp); }
-function makeBot(c) {
-  const s = c.bot, b = { isBot: true, id: s.id, name: s.name, hex: s.colour, aggr: s.aggr, spec: s, cell: c, x: s.x, z: s.z, vx: 0, vz: 0, r: s.r, rt: s.r, xp: 0, level: 1, frac: 0,
+function makeBot(c) { return makeBotFrom(c.bot, c); }
+function makeBotFrom(s, c) {                                      // c: the cell a bot lives in (none in the arena)
+  const b = { isBot: true, id: s.id, name: s.name, hex: s.colour, aggr: s.aggr, spec: s, cell: c, x: s.x, z: s.z, vx: 0, vz: 0, r: s.r, rt: s.r, xp: 0, level: 1, frac: 0,
     eaten: 0, alive: true, dying: 0, respawn: 0, prot: 2, think: Math.random() * 0.2, ang: Math.random() * 6.283, dx: 0, dz: 0, sp: 0, mode: 'wander' };
   botSetXp(b, W.xpForRadius(s.r)); b.r = b.rt;
   return b;
@@ -523,6 +526,7 @@ function bestFood(b) {                                            // the thing w
     if (b.x < c.x0 - reach || b.x > c.x0 + c.C + reach || b.z < c.z0 - reach || b.z > c.z0 + c.C + reach) continue;
     for (const o of c.objs) {
       if (o.state || !W.canEat(o.r, b.r)) continue;
+      if (ARENA && Math.hypot(o.x, o.z) > ARENA.R - b.r) continue;       // food beyond the wall cannot be reached
       const d = Math.hypot(o.x - b.x, o.z - b.z);
       if (d > reach) continue;
       const score = W.xpFor(o.r, b.r) / ((d + b.r) * (d + b.r));
@@ -547,20 +551,21 @@ function botThink(b) {
     if (f) { dx = f.x - b.x; dz = f.z - b.z; b.sp = 0.9; b.mode = 'food'; }
     else { b.ang += (Math.random() - 0.5) * 1.6; dx = Math.cos(b.ang); dz = Math.sin(b.ang); b.sp = 0.6; b.mode = 'wander'; }
   }
+  if (ARENA && b.mode === 'wander' && Math.hypot(b.x, b.z) > ARENA.R - 10 * b.r) { dx = -b.x; dz = -b.z; b.ang = Math.atan2(dz, dx); }   // wandering away from the wall
   const l = Math.hypot(dx, dz) || 1; b.dx = dx / l; b.dz = dz / l;
   if (b.mode !== 'wander') b.ang = Math.atan2(b.dz, b.dx);
 }
 function botsStep(dt) {
-  for (const b of BOTS) { b.d = Math.hypot(b.x - H.x, b.z - H.z); if (!b.alive && b.dying <= 0) { b.respawn -= dt; if (b.respawn <= 0) { const nb = makeBot(b.cell); Object.assign(b, nb, { prot: 3 }); } } }
+  for (const b of BOTS) { b.d = Math.hypot(b.x - H.x, b.z - H.z); if (!b.alive && b.dying <= 0) { b.respawn -= dt; if (b.respawn <= 0) { const nb = makeBotFrom(b.spec, b.cell); Object.assign(b, nb, { prot: 3, deaths: b.deaths }); } } }
   ACTIVE = BOTS.filter(b => b.alive).sort((p, q) => p.d - q.d).slice(0, MAXBOTS);
   dyingBots = BOTS.filter(b => b.dying > 0 && b.d < 40 * H.r);
   for (const b of dyingBots) b.dying = Math.max(0, b.dying - dt);
   for (const b of ACTIVE) {
     b.prot = Math.max(0, b.prot - dt);
     b.think -= dt; if (b.think <= 0) { b.think = 0.2 + Math.random() * 0.1; botThink(b); }
-    const sp = SPEED * b.r * BOT_SPEED * b.sp, k = Math.min(1, dt * 6);
+    const sp = SPEED * b.r * botSpeed * b.sp, k = Math.min(1, dt * 6);
     b.vx += (b.dx * sp - b.vx) * k; b.vz += (b.dz * sp - b.vz) * k;
-    b.x += b.vx * dt; b.z += b.vz * dt;
+    b.x += b.vx * dt; b.z += b.vz * dt; clampArena(b);
     b.r += (b.rt - b.r) * Math.min(1, dt * 6);
   }
   duels();
@@ -580,15 +585,15 @@ function swallowHole(a, b) {
   else { b.alive = false; b.dying = 0.6; b.respawn = RESPAWN; b.deaths = times + 1; }
   if (a === H) {
     gain(xp, 1); H.kills++; stat().kills++; profileDirty = true;
-    const pay = W.killPay(b.r, times); earnCoins(pay);
-    toast('You swallowed ' + b.name + '  +' + coinText(pay) + ' coins', 1.8); sfx('bot');
-  } else botGain(a, xp * BOT_XP);
+    const pay = PLAY.pay === 'full' ? W.killPay(b.r, times) : 0; earnCoins(pay);
+    toast('You swallowed ' + b.name + (pay ? '  +' + coinText(pay) + ' coins' : ''), 1.8); sfx('bot');
+  } else botGain(a, xp * botXp);
 }
 function killPlayer(by) {
   H.deaths++; stat().deaths++; profileDirty = true;
   setXp(H.xp / 2); H.r = H.rt;
   const ang = Math.atan2(H.z - by.z, H.x - by.x), away = 10 * by.r;
-  H.x += Math.cos(ang) * away; H.z += Math.sin(ang) * away; H.vx = H.vz = 0; H.prot = 4;
+  H.x += Math.cos(ang) * away; H.z += Math.sin(ang) * away; H.vx = H.vz = 0; H.prot = 4; clampArena(H);
   plan(); makeCells(200);
   toast('Swallowed by ' + by.name + '. You lost half your xp.', 3.2); sfx('lose');
 }
@@ -619,13 +624,76 @@ function updateLabels() {                                         // a name and 
     el.style.color = b.hex; el.dataset.danger = b.r * W.EAT_MAX >= H.r ? '1' : H.r * W.EAT_MAX >= b.r ? '2' : '0';
   }
 }
-function updateBoard(dt) {                                        // the biggest holes near you
+function updateBoard(dt) {                                        // the biggest holes near you: the top five, and you with your place if you are lower
   boardT -= dt; if (boardT > 0) return; boardT = 0.5;
   const box = $('#board');
   if (state !== 'play' || !ACTIVE.length) { box.hidden = true; return; }
-  const rows = [{ name: 'You', level: H.level, r: H.r, you: true }, ...ACTIVE.map(b => ({ name: b.name, level: b.level, r: b.r, hex: b.hex }))].sort((p, q) => q.r - p.r).slice(0, 6);
+  const rows = [{ name: 'You', level: H.level, r: H.r, you: true }, ...ACTIVE.map(b => ({ name: b.name, level: b.level, r: b.r, hex: b.hex }))].sort((p, q) => q.r - p.r);
+  const shown = rows.slice(0, 5).map((o, i) => ({ ...o, n: i + 1 })), me = rows.findIndex(o => o.you);
+  if (me >= 5) shown.push({ ...rows[me], n: me + 1 });
   box.hidden = false; box.textContent = '';
-  rows.forEach((o, i) => { const d = document.createElement('div'); d.className = o.you ? 'you' : ''; d.textContent = (i + 1) + '. ' + o.name + '  ' + o.level; if (o.hex) d.style.color = o.hex; box.appendChild(d); });
+  shown.forEach(o => { const d = document.createElement('div'); d.className = o.you ? 'you' : ''; d.textContent = o.n + '. ' + o.name + '  ' + o.level; if (o.hex) d.style.color = o.hex; box.appendChild(d); });
+}
+
+// ------------------------------------------------------------------ the arena and timed runs
+// Arena: 12 holes of the same size in a walled ring 90 m across (nothing can leave it); the round lasts 4 minutes and the
+// biggest hole at the end wins. Its 11 bots live outside the map's cells and come back at their own spot, at the start
+// size, when swallowed. They earn more xp and move faster than the map's bots (ARENA_TUNE, from measurement) so that a
+// round is a contest, and they have their own size cap. Time Attack and the Arena are timed: PLAY.left counts down while
+// the game is 'play' (not while paused), and endRun() scores the run, pays by result and shows it.
+const ARENA_R = 45, ARENA_TUNE = { xp: 0.15, speed: 0.8, cap: 4 };
+let ARENA = null, arenaMesh = null;
+function arenaOn() {
+  ARENA = { R: ARENA_R, cap: ARENA_TUNE.cap }; botXp = ARENA_TUNE.xp; botSpeed = ARENA_TUNE.speed; objBudget = 24000;
+  if (!arenaMesh) {
+    arenaMesh = new THREE.Group();
+    const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 96, 1, true), new THREE.MeshBasicMaterial({ color: 0xff6f8f, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
+    wall.scale.set(ARENA_R, 8, ARENA_R); wall.position.y = 4;
+    const edge = new THREE.Mesh(new THREE.RingGeometry(ARENA_R - 0.8, ARENA_R, 96).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff6f8f, side: THREE.DoubleSide }));
+    edge.position.y = 0.05;
+    wall.frustumCulled = edge.frustumCulled = false; arenaMesh.add(wall, edge); scene.add(arenaMesh);
+  }
+  arenaMesh.visible = true;
+}
+function arenaOff() { ARENA = null; if (arenaMesh) arenaMesh.visible = false; botXp = BOT_XP; botSpeed = BOT_SPEED; objBudget = 14000; }
+function arenaBots() {                                            // 11 bots in a ring round the middle, all level 1
+  const n = 11;
+  for (let i = 0; i < n; i++) {
+    const hh = W.hash(W.getSeed(), 900 + i, 1) / 4294967296, hk = W.hash(W.getSeed(), 900 + i, 2) / 4294967296, a = (i + 0.5) / n * 2 * Math.PI + (hh - 0.5) * 0.3, rad = 16 + 18 * hk;
+    const spec = { id: 'arena' + i, x: Math.cos(a) * rad, z: Math.sin(a) * rad, r: W.R0, name: W.BOT_NAMES[(i * 7 + 3) % W.BOT_NAMES.length], colour: W.BOT_COLOURS[(i * 5 + 1) % W.BOT_COLOURS.length], aggr: 0.4 + 0.6 * hk };
+    const b = makeBotFrom(spec, null); b.prot = 4; BOTS.push(b);
+  }
+}
+function clampArena(o) {                                          // the wall: a hole keeps all of itself inside
+  if (!ARENA) return;
+  const d = Math.hypot(o.x, o.z), lim = Math.max(ARENA.R - o.r, 2);
+  if (d > lim) { o.x *= lim / d; o.z *= lim / d; }
+}
+const fmtTime = s => { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const ordinal = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+let timeKey = -1;
+function updateTimer() { const k = Math.ceil(PLAY.left); if (k === timeKey) return; timeKey = k; const e = $('#wTime'); e.textContent = 'Time ' + fmtTime(PLAY.left); e.classList.toggle('low', PLAY.left <= 10); }
+function endRun() {                                               // the time is up: score it, pay by result, show it
+  PLAY.left = 0; timeKey = -1; updateTimer();
+  state = 'over'; IN.touch = null; IN.keys = {}; IN.mouse = false; $('#stick').hidden = true; $('#hint').classList.remove('on');
+  const lines = []; let title, coins, won = false;
+  if (PLAY.id === 'time') {
+    const score = K.timeScore({ level: H.level, frac: H.frac, kills: H.kills }), best = PROFILE.best.time;
+    coins = K.timePay(score); PROFILE.best.timePlayed++; title = "Time's Up";
+    lines.push('Level ' + H.level + ': ' + (H.level * 100 + Math.round(H.frac * 100)).toLocaleString('en-GB') + ' points', 'Kills ' + H.kills + ': ' + (H.kills * 250).toLocaleString('en-GB') + ' points', 'Score ' + score.toLocaleString('en-GB'));
+    if (score > best) { PROFILE.best.time = score; lines.push('New best score'); } else lines.push('Best score ' + best.toLocaleString('en-GB'));
+  } else {
+    const all = [{ name: 'You', r: H.r, level: H.level, you: true }, ...BOTS.map(b => ({ name: b.name, r: b.r, level: b.level }))].sort((p, q) => q.r - p.r), rank = all.findIndex(o => o.you) + 1;
+    coins = K.arenaPay(rank, H.kills); PROFILE.best.arenaPlayed++; won = rank === 1; if (won) PROFILE.best.arenaWins++;
+    if (!PROFILE.best.arenaBest || rank < PROFILE.best.arenaBest) PROFILE.best.arenaBest = rank;
+    title = won ? 'You Won' : 'Round Over';
+    lines.push('You finished ' + ordinal(rank) + ' of ' + all.length, ...all.slice(0, 3).map((o, i) => (i + 1) + '. ' + o.name + ' (level ' + o.level + ')'), 'Kills ' + H.kills);
+  }
+  K.earn(PROFILE, coins); profileDirty = true; saveProfile();
+  lines.push('Coins +' + coinText(coins));
+  $('#ovTitle').textContent = title; const box = $('#ovLines'); box.textContent = '';
+  for (const l of lines) { const d = document.createElement('div'); d.textContent = l; box.appendChild(d); }
+  $('#over').hidden = false; sfx(PLAY.id === 'time' || won ? 'level' : 'lose');
 }
 
 // ------------------------------------------------------------------ levels
@@ -692,9 +760,9 @@ const KEYMAP = { w: 'u', arrowup: 'u', s: 'd', arrowdown: 'd', a: 'l', arrowleft
 addEventListener('keydown', e => {
   ensureAudio();
   const k = e.key.toLowerCase();
-  if (k === 'escape') { e.preventDefault(); if (!$('#admin').hidden) closeAdmin(); else if (!$('#skins').hidden) closeSkins(); else if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
+  if (k === 'escape') { e.preventDefault(); if (!$('#admin').hidden) closeAdmin(); else if (!$('#modes').hidden) closeModes(); else if (!$('#skins').hidden) closeSkins(); else if (!$('#settings').hidden) closeSettings(); else if (state === 'play') openPause(); else if (state === 'pause') closePause(); return; }
   if (KEYMAP[k]) { IN.keys[KEYMAP[k]] = true; if (k.startsWith('arrow')) e.preventDefault(); }
-  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden && $('#skins').hidden && $('#admin').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
+  if (k === 'm' && !e.repeat && (state === 'play' || state === 'pause') && $('#settings').hidden && $('#skins').hidden && $('#admin').hidden && $('#modes').hidden) { setMouse(!S.mouse); if (state === 'play') toast('Mouse steering ' + (S.mouse ? 'on' : 'off'), 1.4); }
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.key.toLowerCase()]; if (k) IN.keys[k] = false; });
 addEventListener('blur', () => { IN.keys = {}; IN.touch = null; $('#stick').hidden = true; });
@@ -722,7 +790,7 @@ function moveHole(dt, ax, ay) {
   const wx = RIGHT[0] * ax + FWD[0] * ay, wz = RIGHT[1] * ax + FWD[1] * ay, sp = SPEED * speedRef();
   const k = Math.min(1, dt * 9);
   H.vx += (wx * sp - H.vx) * k; H.vz += (wz * sp - H.vz) * k;
-  H.x += H.vx * dt; H.z += H.vz * dt;
+  H.x += H.vx * dt; H.z += H.vz * dt; clampArena(H);
 }
 // on the title screen the hole plays itself, round the start
 let auto = { ang: 0.6 };
@@ -758,20 +826,32 @@ function updateCamera(dt, snap) {
 
 // ------------------------------------------------------------------ screens
 let state = 'title';                                              // title, play or pause
-let MODE = 'normal';                                              // the game being played: 'normal' (the endless map) or 'quick' (one fixed scale, no level cap, extremely fast growth)
-const SAVE_KEYS = { normal: 'retroHole.save', quick: 'retroHole.saveQuick' };
-const saveKey = mode => SAVE_KEYS[mode] + (ADMIN ? 'Admin' : '');
-function readSave(mode = MODE) {
+let MODE = 'normal';                                              // the world being played: 'normal' (the endless map, scale growing with distance) or 'quick' (one fixed scale, no level cap, extremely fast growth)
+// The ways to play. bots: 'cells' (the map's own, fixed by the seed), 'arena' (a crowd of equals in a walled ring) or 'none';
+// pay: 'full' (the coin rules of the normal game), 'none' or 'result' (nothing during the run, a payment at the end: the
+// timed modes); secs: the length of a timed run; save: where it is kept (none for the timed modes: a run is one sitting).
+const MODES = {
+  normal: { name: 'Normal Game', world: 'normal', bots: 'cells', save: 'retroHole.save', stat: 'normal', pay: 'full' },
+  quick: { name: 'Quick Mode', world: 'quick', bots: 'cells', save: 'retroHole.saveQuick', stat: 'quick', pay: 'full' },
+  peaceful: { name: 'Peaceful', world: 'normal', bots: 'none', save: 'retroHole.savePeaceful', stat: null, pay: 'none' },
+  area: { name: 'Single Area', world: 'normal', bots: 'cells', save: 'retroHole.saveArea', stat: 'area', pay: 'full' },   // kept for each area: + '.' + the area
+  time: { name: 'Time Attack', world: 'normal', bots: 'cells', save: null, stat: 'time', pay: 'result', secs: K.TIME_SECS },
+  arena: { name: 'Arena', world: 'normal', bots: 'arena', save: null, stat: 'arena', pay: 'result', secs: K.ARENA_SECS },
+};
+let PLAY = { id: 'normal', ...MODES.normal, area: null, left: 0 };
+const saveKeyOf = (id, area) => { const m = MODES[id]; return m && m.save ? m.save + (id === 'area' ? '.' + area : '') + (ADMIN ? 'Admin' : '') : null; };
+function readSave(id = PLAY.id, area = PLAY.area) {
   try {
-    const s = JSON.parse(localStorage.getItem(saveKey(mode)) || 'null');
+    const k = saveKeyOf(id, area), s = k && JSON.parse(localStorage.getItem(k) || 'null');
     if (s && s.v === 1 && isFinite(s.x) && isFinite(s.z) && s.xp >= 0) return s;
   } catch (e) {}
   return null;
 }
 function save() {
   if (profileDirty) saveProfile();
-  if (state === 'title') return;
-  try { localStorage.setItem(saveKey(MODE), JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten, k: H.kills, d: H.deaths, b: H.best })); } catch (e) {}
+  if (state === 'title' || state === 'over') return;
+  const k = saveKeyOf(PLAY.id, PLAY.area); if (!k) return;
+  try { localStorage.setItem(k, JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten, k: H.kills, d: H.deaths, b: H.best })); } catch (e) {}
 }
 const hintsSeen = {};
 function hint(id, text, secs = 7) {
@@ -789,24 +869,34 @@ function lostCheck(dt) {                                          // nothing sma
 }
 function progressHints() {
   if (state !== 'play') return;
-  if (ACTIVE.length) hint('bots', 'Other holes are competing with you. A bigger hole can swallow you, and you can swallow a smaller one: red names are bigger, green are smaller.', 9);
+  if (ACTIVE.length && PLAY.id !== 'arena') hint('bots', 'Other holes are competing with you. A bigger hole can swallow you, and you can swallow a smaller one: red names are bigger, green are smaller.', 9);
   if (H.eaten === 1) hint('first', 'Nicely done. Everything smaller than your hole falls in. Each thing eaten makes you bigger.');
   if (H.level >= 4) hint('far', MODE === 'quick' ? 'Everything is the same size everywhere. The biggest things (towers, dinosaurs, giants) are further from the start.' : 'Walking away from the start finds bigger things to eat. Things get bigger the further out you go.');
   if (H.level >= 12) hint('area', 'Villages, forests and cities each have their own things. Big things that block your view fade out while you are under them.');
 }
-function startGame(fresh, mode = 'normal') {
+function startGame(fresh, id = 'normal', area = null) {
   ensureAudio();
-  clearWorld();
-  W.setMode(mode); MODE = mode;                                   // the mode is set before any cell is made
-  const s = fresh ? null : readSave(mode);
+  if (!MODES[id]) id = 'normal';
+  const def = MODES[id];
+  clearWorld(); BOTS.length = 0; arenaOff();
+  PLAY = { id, ...def, area: id === 'area' ? area : null, left: def.secs || 0 };
+  W.setMode(def.world); MODE = def.world; W.setArea(PLAY.area);    // the world is set before any cell is made
+  botXp = BOT_XP; botSpeed = BOT_SPEED;
+  const s = fresh || !def.save ? null : readSave(id, PLAY.area);
   Object.assign(H, { x: s ? s.x : 0, z: s ? s.z : 0, vx: 0, vz: 0, eaten: s ? s.eaten | 0 : 0, kills: s ? s.k | 0 : 0, deaths: s ? s.d | 0 : 0 });
   setXp(s ? s.xp : 0); H.r = H.rt; H.best = Math.max(H.level, s ? s.b | 0 : 0); clearBits(); popT = popSum = 0; $('#coinPop').classList.remove('on');
   state = 'play'; lastHud = ''; IN.mouse = false; H.prot = 8; ACTIVE = []; dyingBots = [];   // a few seconds before bots can swallow you                // the pointer is ignored until it moves, so the click on Play does not steer
-  $('#title').hidden = true; $('#pause').hidden = true; $('#hud').hidden = false; $('#ver').hidden = true;
+  $('#title').hidden = true; $('#pause').hidden = true; $('#modes').hidden = true; $('#over').hidden = true; $('#hud').hidden = false; $('#ver').hidden = true;
+  if (id === 'arena') arenaOn();
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
-  if (fresh) { try { localStorage.removeItem(saveKey(mode)); } catch (e) {} }
-  $('#wMode').hidden = mode !== 'quick'; $('#wAdmin').hidden = !ADMIN;
+  if (id === 'arena') arenaBots();
+  if (fresh && def.save) { try { localStorage.removeItem(saveKeyOf(id, PLAY.area)); } catch (e) {} }
+  const tag = id === 'quick' ? 'Quick Mode' : id === 'normal' ? '' : def.name;
+  $('#wMode').hidden = !tag; $('#wMode').textContent = tag; $('#wAdmin').hidden = !ADMIN;
+  $('#wTime').hidden = !def.secs; if (def.secs) updateTimer();
   hint('steer', 'Steer with the mouse, WASD or the arrow keys, or touch and drag. Eat things smaller than your hole.', 9);
+  if (id === 'arena') hint('arena', 'Stay inside the wall. The biggest hole when the time is up wins: swallow smaller holes and eat to grow.', 9);
+  if (id === 'time') hint('time', 'Score: 100 points a level, 250 for each hole you swallow. Be as big as you can when the time is up.', 9);
   progressHints();
   save();
 }
@@ -820,11 +910,13 @@ function showTitle() {
   save();
   state = 'title';
   clearWorld();
-  W.setMode('quick'); const q = readSave('quick'), ql = q ? W.progress(q.xp).level : 0;     // the title shows each game's level
+  BOTS.length = 0; arenaOff();
+  PLAY = { id: 'normal', ...MODES.normal, area: null, left: 0 };
+  W.setArea(null); W.setMode('quick'); const q = readSave('quick'), ql = q ? W.progress(q.xp).level : 0;     // the title shows each game's level
   W.setMode('normal'); MODE = 'normal';                            // and its own world is the normal one
   Object.assign(H, { x: 0, z: 0, vx: 0, vz: 0, eaten: 0, kills: 0, deaths: 0 }); setXp(0); H.r = H.rt; H.best = 1; clearBits(); auto = { ang: 0.6 };
-  $('#hud').hidden = true; $('#pause').hidden = true; $('#title').hidden = false; $('#ver').hidden = false;
-  const s = readSave();
+  $('#hud').hidden = true; $('#pause').hidden = true; $('#modes').hidden = true; $('#over').hidden = true; $('#title').hidden = false; $('#ver').hidden = false;
+  const s = readSave('normal');
   $('#bPlay').textContent = s ? 'Continue (Level ' + W.progress(s.xp).level + ')' : 'Play';
   $('#bNew').hidden = !s;
   $('#bQuick').textContent = q ? 'Continue Quick (Level ' + ql.toLocaleString('en-GB') + ')' : 'Quick Game';
@@ -832,7 +924,7 @@ function showTitle() {
   $('#bSkins').textContent = 'Skins (' + Math.floor(PROFILE.coins).toLocaleString('en-GB') + ' coins)';
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
 }
-function openPause() { if (state !== 'play') return; state = 'pause'; save(); $('#bAdmin').hidden = !ADMIN; $('#pause').hidden = false; IN.touch = null; $('#stick').hidden = true; }
+function openPause() { if (state !== 'play') return; state = 'pause'; save(); $('#bAdmin').hidden = !ADMIN; $('#bHome').hidden = PLAY.id === 'arena'; $('#pause').hidden = false; IN.touch = null; $('#stick').hidden = true; }
 function closePause() { if (state !== 'pause') return; state = 'play'; IN.mouse = false; $('#pause').hidden = true; }
 let settingsFrom = null;
 function openSettings() { settingsFrom = state; $('#settings').hidden = false; renderSettings(); }
@@ -893,7 +985,8 @@ function renderSkins() {
   grid.hidden = skTab === 'stats'; stats.hidden = skTab !== 'stats';
   if (skTab === 'stats') {
     const card = (title, lines) => { const d = document.createElement('div'); d.className = 'skCard'; const h = document.createElement('div'); h.className = 'skName'; h.textContent = title; d.appendChild(h); const r = document.createElement('div'); lines.forEach(([k, v], i) => { if (i) r.append('  '); r.append(k + ' '); const b = document.createElement('b'); b.textContent = v; r.appendChild(b); }); d.appendChild(r); stats.appendChild(d); };
-    for (const [m, label] of [['normal', 'Normal Game'], ['quick', 'Quick Game']]) { const s = PROFILE.stats[m]; card(label, [['Kills', s.kills.toLocaleString('en-GB')], ['Deaths', s.deaths.toLocaleString('en-GB')], ['K/D', kdText(s)]]); }
+    for (const [m, label] of [['normal', 'Normal Game'], ['quick', 'Quick Game'], ['time', 'Time Attack'], ['arena', 'Arena'], ['area', 'Single Area']]) { const s = PROFILE.stats[m]; card(label, [['Kills', s.kills.toLocaleString('en-GB')], ['Deaths', s.deaths.toLocaleString('en-GB')], ['K/D', kdText(s)]]); }
+    card('Best Results', [['Time Attack', PROFILE.best.time.toLocaleString('en-GB')], ['Arena wins', PROFILE.best.arenaWins + ' of ' + PROFILE.best.arenaPlayed]]);
     if (state === 'pause') card('This Run', [['Kills', String(H.kills)], ['Deaths', String(H.deaths)], ['K/D', kdText({ kills: H.kills, deaths: H.deaths })]]);
     card('Collection', [['Skins', PROFILE.owned.skin.length + ' of ' + K.SKINS.length], ['Effects', PROFILE.owned.fx.length + ' of ' + K.EFFECTS.length]]);
     return;
@@ -938,7 +1031,7 @@ function setAdmin(on) {
   clearTimeout(verTimer); verTimer = setTimeout(() => { $('#ver').textContent = verText(); }, 4000);
 }
 addEventListener('keydown', async e => {                          // every key typed on the title screen goes into a short buffer; any ending of it may be the word
-  if (state !== 'title' || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || !$('#settings').hidden || !$('#skins').hidden) return;
+  if (state !== 'title' || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1 || !$('#settings').hidden || !$('#skins').hidden || !$('#modes').hidden) return;
   typed = (typed + e.key).slice(-40);
   const s = typed;
   for (let i = 0; i < s.length; i++) if (await isAdminWord(s.slice(i))) { if (state === 'title' && typed === s) { typed = ''; setAdmin(!ADMIN); } return; }
@@ -969,8 +1062,35 @@ function closeAdmin() { $('#admin').hidden = true; }
 $('#bAdmin').onclick = openAdmin; $('#bAdminClose').onclick = closeAdmin;
 $('#adSetLevel').onclick = () => { $('#adLevel').value = adminSetLevel($('#adLevel').value); sfx('ui'); };
 $('#adLevel').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') $('#adSetLevel').click(); if (e.key === 'Escape') closeAdmin(); });
-$('#adCoins').onclick = () => { earnCoins(100000); sfx('level'); };
+$('#adCoins').onclick = () => { earnCoins(100000, true); sfx('level'); };
 for (const b of $('#adGod').children) b.onclick = () => { GOD = b.dataset.v === '1'; renderAdmin(); sfx('ui'); };
+// ------------------------------------------------------------------ the Modes screen
+// Time Attack, Arena, Peaceful and a game in one area, picked from the title screen (#bModes). The timed ones start at
+// once; Peaceful and each area continue where they were (or start) and have a New button when there is a save.
+function renderModes() {
+  const g = $('#mdGrid'); g.textContent = '';
+  const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  const head = text => g.appendChild(mk('div', 'mdHead', text));
+  const card = (title, desc, buttons) => {
+    const c = mk('div', 'skCard mdCard'), info = mk('div', 'skInfo'), row = mk('div', 'mdBtns');
+    info.append(mk('div', 'skName', title)); if (desc) info.append(mk('div', 'skRar', desc));
+    for (const [label, fn] of buttons) { const b = mk('button', 'btn', label); b.type = 'button'; b.onclick = fn; row.appendChild(b); }
+    info.append(row); c.appendChild(info); g.appendChild(c); return c;
+  };
+  const B = PROFILE.best, lv = s => W.progress(s.xp).level;
+  head('Timed');
+  card('Time Attack', '3 minutes. 100 points a level, 250 a kill. ' + (B.timePlayed ? 'Best ' + B.time.toLocaleString('en-GB') + '.' : 'Not played yet.'), [['Start', () => startGame(true, 'time')]]).dataset.mode = 'time';
+  card('Arena', '12 equal holes, 4 minutes: the biggest wins. ' + (B.arenaPlayed ? 'Best ' + ordinal(B.arenaBest) + ', won ' + B.arenaWins + ' of ' + B.arenaPlayed + '.' : 'Not played yet.'), [['Start', () => startGame(true, 'arena')]]).dataset.mode = 'arena';
+  head('Relaxed');
+  { const s = readSave('peaceful'); card('Peaceful', 'No rival holes, no deaths, no coins.', s ? [['Continue (Level ' + lv(s) + ')', () => startGame(false, 'peaceful')], ['New', () => startGame(true, 'peaceful')]] : [['Play', () => startGame(true, 'peaceful')]]).dataset.mode = 'peaceful'; }
+  head('Single Area: an endless game on a map of one area');
+  for (const a of AREAS) { const s = readSave('area', a); card(W.BIOMES[a].name, s ? 'Level ' + lv(s) : 'Not started', s ? [['Continue', () => startGame(false, 'area', a)], ['New', () => startGame(true, 'area', a)]] : [['Play', () => startGame(true, 'area', a)]]).dataset.mode = 'area:' + a; }
+}
+function openModes() { $('#modes').hidden = false; renderModes(); }
+function closeModes() { $('#modes').hidden = true; showTitleLabels(); }
+$('#bModes').onclick = openModes; $('#bModesClose').onclick = closeModes;
+$('#bAgain').onclick = () => { $('#over').hidden = true; startGame(true, PLAY.id, PLAY.area); };
+$('#bOverQuit').onclick = () => { $('#over').hidden = true; showTitle(); };
 $('#bPlay').onclick = () => startGame(false);
 $('#bNew').onclick = () => startGame(true);
 $('#bQuick').onclick = () => startGame(false, 'quick');
@@ -1008,14 +1128,15 @@ let last = performance.now(), frames = 0, drawn = { calls: 0, tris: 0 }, saveT =
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000); last = now; frames++;
-  if (state !== 'pause') {
+  if (state !== 'pause' && state !== 'over') {
     if (state === 'play') { const [ax, ay] = steer(); moveHole(dt, ax, ay); } else autopilot(dt);
     H.r += (H.rt - H.r) * Math.min(1, dt * 6);
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
     H.prot = Math.max(0, H.prot - dt);
-    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); bitsStep(dt); if (state === 'play' && MODE !== 'quick') lostCheck(dt);
+    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); bitsStep(dt); if (state === 'play' && MODE !== 'quick' && PLAY.id !== 'arena') lostCheck(dt);
     if (popT > 0) { popT -= dt; $('#coinPop').textContent = '+' + coinText(popSum); $('#coinPop').classList.toggle('on', popT > 0); if (popT <= 0) popSum = 0; }
+    if (state === 'play' && PLAY.secs) { PLAY.left -= dt; updateTimer(); if (PLAY.left <= 0) endRun(); }
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
@@ -1036,7 +1157,8 @@ window.__rh = {
   wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; }, BOTS, get active() { return ACTIVE; }, get dying() { return dyingBots; }, VIS, UN,
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
-  get mode() { return MODE; }, ADMINW, get admin() { return ADMIN; }, get god() { return GOD; }, openAdmin, closeAdmin, adminSetLevel, findArea, isAdminWord, get profile() { return PROFILE; }, K, openSkins, closeSkins, saveProfile, applySkin, earnCoins, get bits() { return bitsLive; }, spawnBits, COIN_TY, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
+  get mode() { return MODE; }, get play() { return PLAY; }, get arena() { return ARENA; }, MODES, ARENA_TUNE, endRun, openModes, closeModes, renderModes,
+  fastForward(sec) { for (let s = 0; s < sec; s += 0.05) { botsStep(0.05); eatStep(); fallStep(0.05); } }, ADMINW, get admin() { return ADMIN; }, get god() { return GOD; }, openAdmin, closeAdmin, adminSetLevel, findArea, isAdminWord, get profile() { return PROFILE; }, K, openSkins, closeSkins, saveProfile, applySkin, earnCoins, get bits() { return bitsLive; }, spawnBits, COIN_TY, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
   teleport(x, z) { H.x = x; H.z = z; H.vx = H.vz = 0; plan(); makeCells(1000); },
   setXp(xp) { setXp(xp); H.r = H.rt; },
   nearestEdible(re) {                                              // the nearest thing the hole can eat (only types matching re, if given)

@@ -57,8 +57,10 @@ const find = (kind, id) => (Object.prototype.hasOwnProperty.call(KINDS, kind) ? 
 
 // The saved profile: coins (may hold fractions; shown rounded down), what is owned and worn, kills and deaths for good.
 // stats are kept for each game, since Quick Game and the normal game are separate.
-const blankStats = () => ({ normal: { kills: 0, deaths: 0 }, quick: { kills: 0, deaths: 0 } });
-const fresh = () => ({ v: 1, coins: 0, owned: { skin: ['classic'], fx: ['none'] }, wear: { skin: 'classic', fx: 'none' }, stats: blankStats() });
+const STAT_KEYS = ['normal', 'quick', 'time', 'arena', 'area'];   // kills and deaths are kept for each kind of game (Single Area is one, whichever area)
+const blankStats = () => Object.fromEntries(STAT_KEYS.map(k => [k, { kills: 0, deaths: 0 }]));
+const blankBest = () => ({ time: 0, timePlayed: 0, arenaPlayed: 0, arenaWins: 0, arenaBest: 0 });   // arenaBest: the best place (1 is first), 0 when never played
+const fresh = () => ({ v: 1, coins: 0, owned: { skin: ['classic'], fx: ['none'] }, wear: { skin: 'classic', fx: 'none' }, stats: blankStats(), best: blankBest() });
 const num = (x, max = 1e12) => typeof x === 'number' && isFinite(x) && x >= 0 ? Math.min(x, max) : 0;
 function validate(raw) {                                          // a clean profile from anything that was saved
   const p = fresh();
@@ -70,7 +72,8 @@ function validate(raw) {                                          // a clean pro
     const w = raw.wear && raw.wear[k];
     if (typeof w === 'string' && p.owned[k].includes(w)) p.wear[k] = w;
   }
-  for (const m of ['normal', 'quick']) { const s = raw.stats && raw.stats[m]; if (s) { p.stats[m].kills = Math.floor(num(s.kills, 1e9)); p.stats[m].deaths = Math.floor(num(s.deaths, 1e9)); } }
+  for (const m of STAT_KEYS) { const s = raw.stats && raw.stats[m]; if (s) { p.stats[m].kills = Math.floor(num(s.kills, 1e9)); p.stats[m].deaths = Math.floor(num(s.deaths, 1e9)); } }
+  if (raw.best && typeof raw.best === 'object') for (const k of Object.keys(p.best)) p.best[k] = Math.floor(num(raw.best[k], 1e9));
   return p;
 }
 const full = () => { const p = fresh(); p.coins = 100000; for (const k of Object.keys(KINDS)) p.owned[k] = KINDS[k].map(x => x.id); return p; };   // admin mode's test profile: everything owned, plenty of coins
@@ -83,9 +86,16 @@ function buy(p, kind, id) {                                       // spends the 
 }
 function wear(p, kind, id) { if (!find(kind, id) || !owns(p, kind, id)) return false; p.wear[kind] = id; return true; }
 const earn = (p, n) => { if (n > 0 && isFinite(n)) p.coins = Math.round(Math.min(p.coins + n, 1e12) * 100) / 100; };
+// The timed modes pay by result, with a cap so they cannot be repeated to fill the shop. Time Attack: the score is 100 a
+// level plus the share of the next level (0 to 100) plus 250 a kill, and pays a coin for every 40 points, to 300 coins.
+// Arena: 120, 80 and 50 coins for first, second and third, 20 for the rest, plus 10 a kill (at most 8 count), to 200 coins.
+const TIME_SECS = 180, ARENA_SECS = 240, TIME_PAY_CAP = 300, ARENA_PAY_CAP = 200;
+const timeScore = ({ level, frac, kills }) => level * 100 + Math.round(frac * 100) + kills * 250;
+const timePay = score => Math.min(TIME_PAY_CAP, Math.max(0, Math.floor(score / 40)));
+const arenaPay = (rank, kills) => Math.min(ARENA_PAY_CAP, ([0, 120, 80, 50][rank] || 20) + 10 * Math.min(8, Math.max(0, kills)));
 const kd = s => s.deaths ? s.kills / s.deaths : s.kills;          // kills for each death (with no deaths, just the kills)
 const total = p => SKINS.length + EFFECTS.length - 2;             // what can be bought (the two free ones excluded)
 const cost = () => [...SKINS, ...EFFECTS].reduce((a, x) => a + x.price, 0);
-return { RARITY, PRICE, SKINS, EFFECTS, KINDS, find, fresh, full, validate, owns, buy, wear, earn, kd, total, cost };
+return { RARITY, PRICE, SKINS, EFFECTS, KINDS, STAT_KEYS, TIME_SECS, ARENA_SECS, timeScore, timePay, arenaPay, find, fresh, full, validate, owns, buy, wear, earn, kd, total, cost };
 })();
 if (typeof module !== 'undefined') module.exports = SKINS_MOD;
