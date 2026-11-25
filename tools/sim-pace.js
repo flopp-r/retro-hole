@@ -11,10 +11,10 @@ const timeForLevel = L => {                              // minutes to get from 
   const r = W.radiusAt(L, 0.5), S = Math.max(1, r / W.R0), d = W.D0 * (S - 1) + 20;
   const t = W.tierOf(d), C = W.cellSize(t);
   let area = 0, n = 0, xp = 0;
-  for (const biome of ['village', 'forest', 'city']) {   // up to 8 cells of each area at that ring
+  for (const biome of Object.keys(W.BIOMES)) {   // up to 8 cells of each area at that ring
     let got = 0;
-    for (let k = 0; k < 120 && got < 8; k++) {
-      const ang = k * 0.157 + 0.3, x = d * Math.cos(ang), z = d * Math.sin(ang);
+    for (let k = 0; k < 360 && got < 6; k++) {
+      const ang = k * 0.0524 + 0.3, x = d * Math.cos(ang), z = d * Math.sin(ang);
       if (W.biomeAt(x, z) !== biome) continue;
       const c = W.genCell(t, Math.floor(x / C), Math.floor(z / C), r * 0.05);
       area += C * C; got++;

@@ -37,6 +37,11 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #top .btn{pointer-events:auto}
 #where{padding:6px 10px;font-size:20px;text-align:right;line-height:1.1}
 #where b{font-weight:400;color:var(--lamp)}
+#board{left:max(14px,env(safe-area-inset-left));top:calc(max(12px,env(safe-area-inset-top)) + 106px);padding:6px 10px;font-size:19px;line-height:1.05;min-width:150px;opacity:.92}
+#board .you{color:var(--lamp)}
+#labels{position:absolute;inset:0;overflow:hidden}
+.botLabel{position:absolute;transform:translate(-50%,-100%);padding:1px 5px;font-size:18px;line-height:1;white-space:nowrap;background:rgba(13,10,28,.72);border:2px solid var(--ink);text-shadow:1px 1px 0 var(--ink)}
+.botLabel[data-danger="1"]{border-color:#ff4a5a}.botLabel[data-danger="2"]{border-color:#5aff8a}
 #toast{left:50%;top:22%;transform:translateX(-50%);font-family:'Press Start 2P',monospace;font-size:16px;color:var(--lamp);text-shadow:3px 3px 0 var(--ink);white-space:nowrap;opacity:0;transition:opacity .25s;text-align:center}
 #toast.on{opacity:1}
 #hint{left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:min(620px,92vw);padding:7px 14px;font-size:21px;text-align:center;opacity:0;transition:opacity .4s}
@@ -79,6 +84,8 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <button id="bMenu" class="btn" type="button">Menu</button>
     <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span></div>
   </div>
+  <div id="board" class="panel" hidden></div>
+  <div id="labels"></div>
   <div id="toast"></div>
   <div id="hint" class="panel"></div>
 </div>

@@ -18,6 +18,10 @@ ok(W.progress(W.MAXXP).level === 1000 && W.progress(W.MAXXP * 10).level === 1000
 ok(W.xpFor(0.4, 0.5) > W.xpFor(0.1, 0.5) && W.xpFor(0.1, 0.5) > 0, 'bigger things give more xp, small ones still give some');
 ok(W.xpFor(1, 1) > W.xpFor(1, 10), 'the same thing is worth less to a bigger hole');
 
+ok(near(W.xpForRadius(W.radiusAt(1, 0)), 0, 1e-9) && near(W.xpForRadius(W.radiusAt(W.MAXLV, 0)), W.MAXXP, 1e-6), 'a hole of the starting radius has no xp, and one of the cap radius has all of it');
+{ let bad = 0; for (const [L, f] of [[1, 0.3], [2, 0.9], [10, 0.5], [50, 0.1], [100, 0.99], [300, 0.5], [700, 0.2]]) { const p = W.progress(W.xpForRadius(W.radiusAt(L, f))); if (p.level !== L || Math.abs(p.frac - f) > 1e-6) bad++; }
+  ok(bad === 0, 'a bot made at a size has exactly the level that size is'); }
+
 // -- what a hole can swallow
 ok(W.canEat(0.4, 0.5) && !W.canEat(0.5, 0.5) && W.canEat(0.46, 0.5), 'a hole swallows things up to 92% of its radius');
 ok(W.swallowDist(0.4, 0.5) > 0.3 && W.swallowDist(0.46, 0.5) > 0, 'a swallowable thing always falls when the centre is over the hole');
@@ -30,9 +34,9 @@ ok(W.cellSize(0) === 32 && W.cellSize(3) === 256, 'cells are 32 m wide in the fi
 
 // -- areas: the start is a village; every area exists; the same seed gives the same map
 ok(W.biomeAt(0, 0) === 'village' && W.biomeAt(40, -30) === 'village', 'the start is a village');
-const seen = { village: 0, forest: 0, city: 0 };
-for (let k = 0; k < 3000; k++) { const d = 100 + k * 7, th = k * 2.399; seen[W.biomeAt(d * Math.cos(th), d * Math.sin(th))]++; }
-ok(seen.village > 300 && seen.forest > 300 && seen.city > 300, 'villages, forests and cities all turn up (' + JSON.stringify(seen) + ')');
+const seen = {}; for (const k of Object.keys(W.BIOMES)) seen[k] = 0;
+for (let k = 0; k < 6000; k++) { const d = 100 + k * 7, th = k * 2.399; seen[W.biomeAt(d * Math.cos(th), d * Math.sin(th))]++; }
+ok(Object.keys(W.BIOMES).length === 7 && Object.values(seen).every(n => n > 100), 'all seven areas turn up (' + JSON.stringify(seen) + ')');
 ok(W.biomeAt(1234.5, -987.6) === W.biomeAt(1234.5, -987.6), 'an area is the same each time it is asked');
 // regions are big: walking out along any direction, the first change of area is a long way off, and the start is a big village
 let nearest = 1e9, startR = 1e9;
@@ -52,6 +56,21 @@ ok(startR >= 150, 'the village round the start is at least 150 m in every direct
     if (!edge && n > 40 && !nearRingEdge && 2 * maxd * st < 250 && away < 1000) small.push(b + ' ' + Math.round(2 * maxd * st) + ' m'); }
   ok(small.length === 0, 'no area within 1 km of the start has a patch narrower than 250 m (' + small.join(', ') + ')'); }
 
+// -- rival holes
+{ let n = 0, cells = 0, mism = 0, bad = 0, nearStart = 0; const names = new Set();
+  for (let tt = 0; tt < 5; tt++) for (let i = -12; i < 12; i++) for (let j = -12; j < 12; j++) { const [dA, dB] = W.tierRange(tt), c = W.cellInfo(tt, i, j), d = Math.hypot(c.cx, c.cz); if (d < dA || d >= dB) continue; cells++;
+    const b = W.genCell(tt, i, j, 0).bot, b2 = W.genCell(tt, i, j, 0.5).bot;
+    if (JSON.stringify(b) !== JSON.stringify(b2)) mism++;
+    if (!b) continue; n++; names.add(b.name);
+    const dd = Math.hypot(b.x, b.z), S = W.scaleAt(dd), f = b.r / (W.R0 * S);
+    if (!(f >= 0.49 && f <= 2.7) || b.x < c.x0 || b.x > c.x1 || b.z < c.z0 || b.z > c.z1 || W.tierOf(dd) !== tt || !/^#[0-9a-f]{6}$/i.test(b.colour)) bad++;
+    if (dd < 150 && f > 1.21 && !(tt === 0 && W.START_BOTS)) bad++; }
+  ok(mism === 0, 'a cell\'s bot is the same however much is culled');
+  ok(bad === 0, 'every bot is inside its cell and as big as its place suits (0.5 to 2.7 times, and no bigger than 1.2 times near the start)');
+  ok(n / cells > 0.12 && n / cells < 0.28 && names.size > 25, 'about one cell in five has a bot, with many different names (' + n + ' in ' + cells + ' cells, ' + names.size + ' names)');
+  const a = W.genCell(0, 0, 0, 0).bot, b = W.genCell(0, -1, -1, 0).bot;
+  ok(a && b && a.r < W.R0 * 1.0 && b.r < W.R0 * 0.8 && W.canEat(b.r, W.R0) && !W.canEat(W.R0, a.r * 0.5), 'two small bots live round the start, neither able to swallow a new hole'); }
+
 // -- the models
 for (const t of W.TYPES) {
   const m = W.model(t);
@@ -68,8 +87,8 @@ for (const b of ['village', 'forest', 'city']) ok(small.filter(t => t.biome === 
 // -- plots and roads: the framework every area follows
 const kindsSeen = {};
 for (let t = 0; t < 7; t++) for (let i = -30; i < 30; i++) for (let j = -30; j < 30; j++) { const [dA, dB] = W.tierRange(t), c = W.cellInfo(t, i, j), d = Math.hypot(c.cx, c.cz); if (d >= dA && d < dB) kindsSeen[c.biome + '/' + c.kind] = 1; }
-const KINDS = ['village/homestead', 'village/farm', 'village/pasture', 'village/field', 'village/orchard', 'village/green', 'village/pond', 'village/meadow', 'forest/dense', 'forest/mixed', 'forest/clearing', 'forest/rocky', 'forest/pond', 'forest/grove', 'city/built', 'city/park', 'city/plaza', 'city/lot'];
-ok(KINDS.every(k => kindsSeen[k] && W.LAYOUTS[k.split('/')[0]][k.split('/')[1]]), 'all 18 kinds of plot turn up, and each has a layout (' + KINDS.filter(k => !kindsSeen[k]).join(',') + ')');
+const KINDS = ['jurassic/jungle', 'jurassic/paddock', 'jurassic/nest', 'jurassic/visitor', 'jurassic/lagoon', 'jurassic/compound', 'desert/dunes', 'desert/oasis', 'desert/town', 'desert/ruins', 'desert/canyon', 'desert/camp', 'arctic/snowfield', 'arctic/pinewood', 'arctic/frozenlake', 'arctic/outpost', 'arctic/iglooville', 'arctic/glacier', 'volcano/ashfield', 'volcano/lavaflow', 'volcano/crater', 'volcano/mine', 'volcano/forge', 'volcano/spires', 'village/homestead', 'village/farm', 'village/pasture', 'village/field', 'village/orchard', 'village/green', 'village/pond', 'village/meadow', 'forest/dense', 'forest/mixed', 'forest/clearing', 'forest/rocky', 'forest/pond', 'forest/grove', 'city/built', 'city/park', 'city/plaza', 'city/lot'];
+ok(KINDS.every(k => kindsSeen[k] && W.LAYOUTS[k.split('/')[0]][k.split('/')[1]]), 'all 42 kinds of plot turn up, and each has a layout (' + KINDS.filter(k => !kindsSeen[k]).join(',') + ')');
 ok(W.cellInfo(0, 0, 0).kind === 'pasture' && W.cellInfo(0, -1, 0).kind === 'homestead' && W.cellInfo(0, 0, -1).kind === 'green' && W.cellInfo(0, -1, -1).kind === 'homestead', 'the four cells round the start are fixed');
 let edgeBad = 0, edges = 0, roadStart = 0;
 for (let t = 0; t < 4; t++) for (let i = -9; i < 9; i++) for (let j = -9; j < 9; j++) {
@@ -131,7 +150,9 @@ const nearMax = Math.max(...W.genCell(0, 0, 0).objs.map(o => o.r)), farMax = Mat
 ok(farMax > nearMax * 8, 'things are much bigger far out (' + nearMax.toFixed(2) + ' m against ' + farMax.toFixed(0) + ' m)');
 
 // -- believable places: things stand where they belong
+const scanCells = (pred, limit) => { const out = []; for (let tt = 0; tt < 6 && out.length < limit; tt++) for (let i = -30; i < 30 && out.length < limit; i++) for (let j = -30; j < 30 && out.length < limit; j++) { const [dA, dB] = W.tierRange(tt), c = W.cellInfo(tt, i, j), d = Math.hypot(c.cx, c.cz); if (d >= dA && d < dB && pred(c)) out.push([tt, i, j]); } return out; };
 const idOf = o => W.TYPES[o.ty].id.replace(/\d$/, '');
+const DINO_IDS = ['gallimimus', 'raptor', 'ankylosaurus', 'triceratops', 'stegosaurus', 'trex', 'brachio'];
 const sideDist = (c, o) => ({ w: o.x - c.x0, e: c.x1 - o.x, n: o.z - c.z0, s: c.z1 - o.z });
 const cityCells = SAMPLE.filter(([t, i, j]) => W.cellInfo(t, i, j).biome === 'city' && t >= 1), built = cityCells.filter(([t, i, j]) => W.cellInfo(t, i, j).kind === 'built');
 let cars = 0, carsOff = 0, carsWrong = 0, blds = 0, bldOnRoad = 0, bldWrong = 0, lamps = 0, lampsOff = 0, lights = 0, lightsOff = 0;
@@ -181,17 +202,27 @@ ok(pens > 20 && penBad === 0, 'penned animals are inside their pens (' + pens + 
 ok(fences > 50, 'there are fences (' + fences + ')');
 // the village and the forest: houses face their lane, trees are not on trails
 let houseBad = 0, houseN = 0, treeOnTrail = 0, trees = 0;
-for (const [t, i, j] of SAMPLE) {
-  const c = W.cellInfo(t, i, j);
-  if (c.biome === 'village' && c.kind === 'homestead') for (const o of W.genCell(t, i, j, 0).objs) if (/^(house|cottage)/.test(W.TYPES[o.ty].id)) { houseN++; const roads = Object.keys(c.road).filter(k => c.road[k]); if (roads.length && !roads.some(k => angleEq(o.yaw, W.yawOf(...W.FACE[k])))) houseBad++; }
-  if (c.biome === 'forest') for (const o of W.genCell(t, i, j, 0).objs) if (['pine', 'oak', 'giantoak', 'redwood'].includes(idOf(o))) { trees++; const dist = sideDist(c, o); for (const k of Object.keys(dist)) if (c.road[k] && dist[k] - Math.max(o.ex, o.ez) < W.STYLES[c.road[k]].w / 2 * c.TS - 1e-6) treeOnTrail++; }
-}
+for (const [tt, i, j] of scanCells(c => c.biome === 'village' && c.kind === 'homestead', 60)) { const c = W.cellInfo(tt, i, j);
+  for (const o of W.genCell(tt, i, j, 0).objs) if (/^(house|cottage)/.test(W.TYPES[o.ty].id)) { houseN++; const roads = Object.keys(c.road).filter(k => c.road[k]); if (roads.length && !roads.some(k => angleEq(o.yaw, W.yawOf(...W.FACE[k])))) houseBad++; } }
+const TREE_IDS = ['pine', 'oak', 'giantoak', 'redwood', 'jungletree', 'tropicpalm', 'cycad', 'swamptree', 'snowpine', 'datepalm', 'charredtree'];
+for (const [tt, i, j] of scanCells(c => ['forest', 'jurassic', 'arctic', 'desert', 'volcano'].includes(c.biome) && ['dense', 'mixed', 'grove', 'jungle', 'pinewood', 'oasis', 'ashfield'].includes(c.kind), 160)) { const c = W.cellInfo(tt, i, j);
+  for (const o of W.genCell(tt, i, j, 0).objs) if (TREE_IDS.includes(idOf(o))) { trees++; const dist = sideDist(c, o); for (const k of Object.keys(dist)) if (c.road[k] && dist[k] - Math.max(o.ex, o.ez) < W.STYLES[c.road[k]].w / 2 * c.TS - 1e-6) treeOnTrail++; } }
 ok(houseN >= 10 && houseBad === 0, 'houses face their lane (' + houseN + ')');
-ok(trees > 200 && treeOnTrail === 0, 'trees keep off the trails (' + trees + ')');
-// ponds: a pond cell has water, and ducks and reeds round it, and nothing stands in the water
-let pondBad = 0, ponds = 0, ducks = 0;
-for (let t = 0; t < 4; t++) for (let i = -12; i < 12; i++) for (let j = -12; j < 12; j++) { const [dA, dB] = W.tierRange(t), c = W.cellInfo(t, i, j), d = Math.hypot(c.cx, c.cz); if (!c.pond || d < dA || d >= dB) continue; ponds++; for (const o of W.genCell(t, i, j, 0).objs) { const id = idOf(o); if (id === 'duck') ducks++; else if (Math.hypot(o.x - c.pond.x, o.z - c.pond.z) < c.pond.r * 0.9) pondBad++; } }
-ok(ponds >= 6 && pondBad === 0 && ducks > 5, 'ponds have ducks and nothing but ducks in the water (' + ponds + ' ponds, ' + ducks + ' ducks)');
+ok(trees > 1000 && treeOnTrail === 0, 'trees keep off the roads and trails in every area (' + trees + ')');
+// pools and rivers (water, ice, lava): only things that belong on them stand in them
+let wetBad = 0, pools = 0, wet = 0, riverBad = 0, rivers = 0; const liquids = new Set();
+for (const [tt, i, j] of scanCells(c => !!c.pond || !!c.river, 120)) { const c = W.cellInfo(tt, i, j); if (c.pond) { pools++; liquids.add(c.pond.liquid); } if (c.river) { rivers++; liquids.add(c.river.liquid); }
+  for (const o of W.genCell(tt, i, j, 0).objs) { const inPond = c.pond && Math.hypot(o.x - c.pond.x, o.z - c.pond.z) < c.pond.r * 0.9, inRiver = c.river && Math.abs((c.river.horiz ? o.z : o.x) - c.river.at) < c.river.w / 2 * 0.9;
+    if (inPond || inRiver) { if (o.wet) wet++; else wetBad++; } } }
+ok(pools >= 20 && rivers >= 3 && liquids.size === 3 && wetBad === 0 && wet > 40, 'only creatures and reeds that belong stand in water, ice or lava (' + pools + ' pools, ' + rivers + ' rivers, ' + wet + ' things on the liquid, ' + [...liquids].join('/') + ')');
+// pens of every kind: electric fences round dinosaurs, a herd of one species, a gate
+let paddocks = 0, fencedOk = 0;
+const inRing = c => [[c.x0, c.z0], [c.x1, c.z0], [c.x0, c.z1], [c.x1, c.z1]].every(q => W.tierOf(Math.hypot(...q)) === c.t);   // not straddling a ring edge
+for (const [tt, i, j] of scanCells(c => c.biome === 'jurassic' && c.kind === 'paddock' && inRing(c), 12)) { const objs = W.genCell(tt, i, j, 0).objs; paddocks++; const penned = objs.filter(o => o.pen && DINO_IDS.includes(idOf(o))), species = new Set(penned.map(idOf)); if (penned.length >= 2 && species.size === 1 && objs.some(o => idOf(o) === 'gate') && objs.filter(o => idOf(o) === 'efence').length > 20) fencedOk++; }
+ok(paddocks >= 6 && fencedOk === paddocks, 'every dinosaur paddock has a herd of one species behind an electric fence with a gate (' + paddocks + ')');
+// each new area has its own things, and its small ones are there to eat from the start of its ring
+const AREA_SMALL = { jurassic: ['egg', 'compy'], desert: ['scorpion', 'lizard', 'cactus'], arctic: ['hare', 'penguin', 'snowdrift'], volcano: ['magmanewt', 'ember', 'lavarock'] };
+for (const [area, ids] of Object.entries(AREA_SMALL)) { const found = new Set(); for (const [tt, i, j] of scanCells(c => c.biome === area, 25)) for (const o of W.genCell(tt, i, j, 0).objs) found.add(idOf(o)); ok(ids.every(id => found.has(id)) && found.size >= 14, area + ' has its own small things and at least 14 kinds of thing (' + found.size + ')'); }
 
 // -- the cells wanted round a point
 const w0 = W.wantedCells(0, 0, 10);

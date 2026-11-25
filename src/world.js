@@ -51,6 +51,12 @@ function progress(xp) {                                           // { level, fr
   return { level: lo, frac: (xp - CUM[lo]) / need(lo) };
 }
 const radiusAt = (level, frac = 0) => R0 * Math.pow(REACH, Math.pow(Math.min(level - 1 + frac, MAXLV - 1) / (MAXLV - 1), CURVE));
+// the xp at which a hole has a given radius: the inverse of radiusAt, so a bot made at a size has a level
+function xpForRadius(r) {
+  if (r <= R0) return 0;
+  const x = Math.pow(Math.log(r / R0) / Math.log(REACH), 1 / CURVE) * (MAXLV - 1), L = Math.floor(x) + 1;
+  return L >= MAXLV ? MAXXP : CUM[L] + (x - Math.floor(x)) * need(L);
+}
 const xpFor = (objR, holeR) => { const q = objR / holeR; return 0.015 + q * q; };
 const canEat = (objR, holeR) => objR <= holeR * EAT_MAX;
 const swallowDist = (objR, holeR) => holeR - 0.35 * objR;         // the hole's centre must be this close to the thing's
@@ -154,6 +160,108 @@ def('forest', 'reed', 'Reeds', 0.1, 0, [P(1, 5, 1, '#8a9a3a'), P(1, 1, 1, '#6a4a
 def('forest', 'campfire', 'Campfire', 0.2, 0, [P(5, 1, 5, '#8a8f9a'), P(4, 1, 1, '#6a4a2a', 0, 1, 0), P(1, 1, 4, '#6a4a2a', 0, 1, 0), P(2, 3, 2, '#ff8a2a', 0, 1, 0), P(1, 2, 1, '#ffd34d', 0, 3, 0)]);
 def('forest', 'woodpile', 'Woodpile', 0.35, 0, [P(6, 3, 3, '#8a5a30'), P(6, 2, 3, '#7a4a22', 0, 3, 0), P(0.5, 2.6, 2.6, '#c8a06a', -3, 0.2, 0), P(0.5, 2.6, 2.6, '#c8a06a', 3, 0.2, 0)]);
 
+// -- Jurassic Park: eggs and small dinosaurs to eat from the start, bigger ones in paddocks, and the park's own buildings
+const DG = '#4a8a3a', DG2 = '#3a6e2e', BONE = '#e8dcc0', IRON = '#6a6a72';
+def('jurassic', 'egg', 'Dinosaur Egg', 0.1, 0, [P(3, 4, 3, 'T'), P(2, 1, 2, 'T', 0, 4, 0), P(1, 1, 0.5, '#8a7a5a', 0, 2, -1.6)], { tints: ['#efe6c4', '#cfe8c0', '#e8d2b8'] });
+def('jurassic', 'nest', 'Nest', 0.3, 0, [P(8, 2, 8, '#7a5a3a'), P(5, 1, 5, '#5a4528', 0, 2, 0), P(2, 3, 2, '#efe6c4', -1.2, 2, -0.5), P(2, 3, 2, '#cfe8c0', 1.2, 2, 0.8), P(2, 3, 2, '#e8d2b8', 0, 2, -1.6)]);
+def('jurassic', 'compy', 'Compy', 0.12, 0, [P(2, 2, 4, DG, 0, 2, 0), P(2, 2, 2, DG, 0, 3.5, -3), P(1, 1, 4, DG, 0, 2.5, 3.5), P(1, 2, 1, DG2, -0.7, 0, 0.5), P(1, 2, 1, DG2, 0.7, 0, 0.5)], { walk: 0.8 });
+def('jurassic', 'raptor', 'Raptor', 0.45, 15, [P(3, 4, 8, '#5a7a3a', 0, 4, 0), P(3, 3, 4, '#5a7a3a', 0, 7, -5.5), P(2, 1, 3, BONE, 0, 6.3, -6.8), P(2, 2, 8, '#4a6a2e', 0, 5, 7.5), P(2, 4, 2, '#3a5a24', -1.5, 0, 0.5), P(2, 4, 2, '#3a5a24', 1.5, 0, 0.5), P(3.2, 0.6, 2, '#2a2a2a', 0, 8, 0.5), P(1, 1, 1, BONE, -1.5, 0, -1.5), P(1, 1, 1, BONE, 1.5, 0, -1.5)], { walk: 0.9 });
+def('jurassic', 'gallimimus', 'Gallimimus', 0.55, 20, [P(1, 6, 1, '#c9a05a', -1, 0, 0), P(1, 6, 1, '#c9a05a', 1, 0, 0), P(3, 4, 6, '#c9a05a', 0, 6, 0), P(2, 6, 2, '#c9a05a', 0, 9, -3), P(2, 2, 3, '#c9a05a', 0, 14, -4.5), P(1, 2, 5, '#a8803a', 0, 8, 5)], { walk: 0.8 });
+def('jurassic', 'ankylosaurus', 'Ankylosaurus', 1.0, 30, [P(8, 4, 10, '#8a7a5a', 0, 2, 0), P(8.4, 1, 10.4, '#6a5a3a', 0, 6, 0), P(1.5, 1.5, 1.5, '#e8dcc0', -3, 7, -2), P(1.5, 1.5, 1.5, '#e8dcc0', 3, 7, 1), P(4, 3, 3, '#8a7a5a', 0, 2, -6.5), P(4, 3, 3, '#6a5a3a', 0, 3, 11), P(2, 4, 2, '#6a5a3a', -3, 0, -3), P(2, 4, 2, '#6a5a3a', 3, 0, -3), P(2, 4, 2, '#6a5a3a', -3, 0, 3), P(2, 4, 2, '#6a5a3a', 3, 0, 3)], { walk: 0.2 });
+def('jurassic', 'triceratops', 'Triceratops', 1.2, 25, [P(8, 6, 12, '#7a8a6a', 0, 3, 0), P(7, 6, 1, '#9a6a4a', 0, 6, -6.5), P(5, 5, 4, '#7a8a6a', 0, 2, -8), P(1, 1, 3, '#f2ede0', -2, 5, -10), P(1, 1, 3, '#f2ede0', 2, 5, -10), P(1, 1, 2, '#f2ede0', 0, 3, -10.5), P(2, 3, 2, '#6a7a5a', -3, 0, -4), P(2, 3, 2, '#6a7a5a', 3, 0, -4), P(2, 3, 2, '#6a7a5a', -3, 0, 4), P(2, 3, 2, '#6a7a5a', 3, 0, 4), P(2, 2, 5, '#6a7a5a', 0, 4, 8)], { walk: 0.25 });
+def('jurassic', 'stegosaurus', 'Stegosaurus', 1.4, 35, [P(7, 6, 13, '#6a8a4a', 0, 3, 0), P(1, 4, 2, '#c8553d', 0, 9, -4), P(1, 5, 2, '#c8553d', 0, 9, -1), P(1, 5, 2, '#c8553d', 0, 9, 2), P(1, 4, 2, '#c8553d', 0, 9, 5), P(3, 3, 3, '#6a8a4a', 0, 3, -8), P(3, 3, 6, '#6a8a4a', 0, 4, 9), P(1, 2, 1, BONE, -1, 5, 13), P(1, 2, 1, BONE, 1, 5, 13), P(2, 3, 2, '#5a7a3a', -3, 0, -4), P(2, 3, 2, '#5a7a3a', 3, 0, -4), P(2, 3, 2, '#5a7a3a', -3, 0, 4), P(2, 3, 2, '#5a7a3a', 3, 0, 4)], { walk: 0.2 });
+def('jurassic', 'trex', 'Tyrannosaurus', 2.6, 60, [P(3, 8, 3, '#6a5a3a', -3, 0, 0), P(3, 8, 3, '#6a5a3a', 3, 0, 0), P(8, 8, 14, '#7a6a3a', 0, 8, 0), P(5, 6, 6, '#7a6a3a', 0, 13, -9), P(4, 2, 5, BONE, 0, 11.5, -10.5), P(1, 2, 3, '#6a5a3a', -3, 10, -6), P(1, 2, 3, '#6a5a3a', 3, 10, -6), P(4, 4, 10, '#6a5a3a', 0, 9, 10)], { walk: 0.25 });
+def('jurassic', 'brachio', 'Brachiosaurus', 3.6, 100, [P(10, 8, 16, '#8a9a6a', 0, 8, 0), P(3, 8, 3, '#8a9a6a', 0, 12, -8), P(3, 8, 3, '#8a9a6a', 0, 20, -9), P(3, 3, 4, '#8a9a6a', 0, 28, -10.5), P(3, 3, 10, '#8a9a6a', 0, 9, 13), P(3, 8, 3, '#7a8a5a', -4, 0, -5), P(3, 8, 3, '#7a8a5a', 4, 0, -5), P(3, 8, 3, '#7a8a5a', -4, 0, 5), P(3, 8, 3, '#7a8a5a', 4, 0, 5)], { walk: 0.12 });
+def('jurassic', 'cycad', 'Cycad', 0.5, 0, [P(3, 4, 3, '#6a5a3a'), P(10, 1, 2, '#3a8a3a', 0, 4, 0), P(2, 1, 10, '#3a8a3a', 0, 4, 0), P(6, 1, 6, '#4aa04a', 0, 5, 0)]);
+def('jurassic', 'tropicpalm', 'Palm Tree', 1.3, 0, [P(2, 16, 2, '#8a6a3a'), P(14, 1, 3, '#2f8a3a', 0, 16, 0), P(3, 1, 14, '#2f8a3a', 0, 16, 0), P(10, 1, 10, '#3aa046', 0, 17, 0)]);
+def('jurassic', 'jungletree', 'Jungle Tree', 2.4, 10, [P(5, 16, 5, '#5a4528'), P(20, 5, 20, '#1f6a2a', 0, 16, 0), P(14, 4, 14, '#2a7a34', 0, 21, 0), P(1, 10, 1, '#3a8a3a', -8, 6, -8), P(1, 8, 1, '#3a8a3a', 8, 8, 6), P(1, 9, 1, '#3a8a3a', 2, 7, 9)]);
+def('jurassic', 'giantfern', 'Giant Fern', 0.35, 0, [P(1, 3, 1, '#2a6a2a'), P(8, 1, 2, '#3a8a3a', 0, 3, 0), P(2, 1, 8, '#3a8a3a', 0, 3, 0), P(6, 1, 6, '#4aa04a', 0, 4, 0)]);
+def('jurassic', 'swamptree', 'Swamp Tree', 1.6, 0, [P(1, 4, 1, '#5a4528', -3, 0, -3), P(1, 4, 1, '#5a4528', 3, 0, -3), P(1, 4, 1, '#5a4528', -3, 0, 3), P(1, 4, 1, '#5a4528', 3, 0, 3), P(4, 8, 4, '#4a3a22', 0, 4, 0), P(14, 4, 14, '#2a5a2a', 0, 12, 0), P(8, 3, 8, '#3a6a30', 0, 16, 0)]);
+def('jurassic', 'fossil', 'Fossil', 0.4, 0, [P(10, 1, 2, BONE), P(1, 3, 1, BONE, -3, 1, 1), P(1, 3, 1, BONE, -1, 1, 1), P(1, 3, 1, BONE, 1, 1, 1), P(1, 3, 1, BONE, 3, 1, 1), P(3, 2, 3, BONE, -6, 0, 0)]);
+def('jurassic', 'jeep', 'Park Jeep', 0.95, 0, [P(8, 3, 12, 'T', 0, 2, 0), P(7, 2, 4, 'T', 0, 3, -4), P(7, 2, 0.5, GLASS, 0, 5, -2.5), P(7, 3, 0.8, '#2a2a2a', 0, 5, 3), P(0.8, 3, 5, '#2a2a2a', -3.5, 5, 2), P(0.8, 3, 5, '#2a2a2a', 3.5, 5, 2), P(1, 3, 3, DARK, -4, 0, -4), P(1, 3, 3, DARK, 4, 0, -4), P(1, 3, 3, DARK, -4, 0, 4), P(1, 3, 3, DARK, 4, 0, 4)], { tints: ['#d8b030', '#c0392b', '#3f9a5a'] });
+def('jurassic', 'gate', 'Park Gate', 2.2, 0, [P(4, 16, 4, '#8a8a82', -10, 0, 0), P(4, 16, 4, '#8a8a82', 10, 0, 0), P(24, 3, 4, '#6a6a62', 0, 16, 0), P(14, 3, 1, '#c8a030', 0, 19, 0), P(2, 6, 2, '#c8a030', -10, 16, 0), P(2, 6, 2, '#c8a030', 10, 16, 0)]);
+def('jurassic', 'efence', 'Electric Fence', 0.4, 0, [P(1, 7, 1, IRON, -3, 0, 0), P(1, 7, 1, IRON, 3, 0, 0), P(7, 0.5, 0.5, '#d8d8d8', 0, 2, 0), P(7, 0.5, 0.5, '#d8d8d8', 0, 4, 0), P(7, 0.5, 0.5, '#d8d8d8', 0, 6, 0), P(1.3, 1, 1.3, '#e8b023', -3, 5, 0), P(1.3, 1, 1.3, '#e8b023', 3, 5, 0)]);
+def('jurassic', 'visitorcentre', 'Visitor Centre', 4.0, 30, [P(30, 8, 22, '#c8c0a8'), P(32, 1, 24, '#8a8272', 0, 8, 0), P(20, 6, 16, GLASS, 0, 9, 0), P(14, 4, 12, '#cfe8f5', 0, 15, 0), P(8, 5, 1, '#2a3a4a', 0, 0, -11.2), P(12, 2, 1, '#c8a030', 0, 6, -11.5)]);
+def('jurassic', 'giftshop', 'Gift Shop', 2.2, 20, [P(16, 8, 12, '#c8c0a8'), P(18, 1, 14, '#2f6a3a', 0, 8, 0), P(16, 1, 4, '#c8553d', 0, 5, -8), P(4, 5, 1, '#2a3a4a', 0, 0, -6.2), P(4, 3, 1, GLASS, -5, 2, -6.2), P(4, 3, 1, GLASS, 5, 2, -6.2)]);
+def('jurassic', 'lab', 'Laboratory', 3.0, 40, [P(22, 10, 16, '#a8aeb0'), P(23, 1, 17, '#6a7072', 0, 10, 0), P(1, 10, 1, '#d0d4de', 6, 11, 4), P(5, 1, 5, '#e8e8e8', -6, 11, 3), P(4, 5, 1, '#2a3a4a', 0, 0, -8.2), P(4, 3, 1, GLASS, -7, 4, -8.2), P(4, 3, 1, GLASS, 7, 4, -8.2)]);
+def('jurassic', 'generator', 'Generator', 0.6, 0, [P(8, 5, 6, '#c8a030'), P(1, 4, 1, IRON, -3, 5, 0), P(1, 4, 1, IRON, 3, 5, 0), P(8, 1, 1, IRON, 0, 9, 0), P(8.2, 1, 6.2, '#2a2a2a', 0, 2, 0)]);
+def('jurassic', 'helipad', 'Helipad', 2.2, 0, [P(24, 0.6, 24, '#6a6a6a'), P(2, 0.2, 10, '#f2f2f2', -3, 0.6, 0), P(2, 0.2, 10, '#f2f2f2', 3, 0.6, 0), P(6, 0.2, 2, '#f2f2f2', 0, 0.6, 0)]);
+def('jurassic', 'camptent', 'Tent', 1.0, 0, [P(10, 3, 10, 'T'), P(8, 3, 8, 'T', 0, 3, 0), P(5, 3, 5, 'T', 0, 6, 0), P(2, 2, 2, 'T', 0, 9, 0), P(3, 3, 0.5, '#1a1a1a', 0, 0, -5.2)], { tints: ['#5a7a3a', '#c8b070'] });
+def('jurassic', 'cage', 'Transport Cage', 0.9, 0, [P(10, 1, 10, '#4a4a52'), P(10, 1, 10, '#4a4a52', 0, 8, 0), P(0.8, 8, 0.8, IRON, -4.6, 1, -4.6), P(0.8, 8, 0.8, IRON, 4.6, 1, -4.6), P(0.8, 8, 0.8, IRON, -4.6, 1, 4.6), P(0.8, 8, 0.8, IRON, 4.6, 1, 4.6), P(0.8, 8, 0.8, IRON, 0, 1, -4.6), P(0.8, 8, 0.8, IRON, 0, 1, 4.6)]);
+def('jurassic', 'watchtower', 'Watchtower', 1.4, 40, [P(1.5, 16, 1.5, '#6a5a3a', -4, 0, -4), P(1.5, 16, 1.5, '#6a5a3a', 4, 0, -4), P(1.5, 16, 1.5, '#6a5a3a', -4, 0, 4), P(1.5, 16, 1.5, '#6a5a3a', 4, 0, 4), P(12, 1, 12, '#8a6a3a', 0, 16, 0), P(9, 5, 9, '#8a6a3a', 0, 17, 0), P(11, 1, 11, '#5a4a2a', 0, 22, 0)]);
+// -- Desert: cacti, scorpions and lizards to eat, camels, adobe towns, markets, ruins and, far out, pyramids
+const SAND = '#c8a060';
+def('desert', 'cactus', 'Cactus', 0.3, 0, [P(3, 8, 3, '#3a8a4a'), P(1, 3, 1, '#3a8a4a', -3, 4, 0), P(3, 1, 1, '#3a8a4a', -2, 4, 0), P(1, 2, 1, '#3a8a4a', 3, 5, 0), P(3, 1, 1, '#3a8a4a', 2, 5, 0)]);
+def('desert', 'saguaro', 'Saguaro', 0.7, 0, [P(4, 18, 4, '#3a8a4a'), P(1, 5, 1, '#3a8a4a', -4, 7, 0), P(4, 1, 1, '#3a8a4a', -2.5, 7, 0), P(1, 4, 1, '#3a8a4a', 4, 10, 0), P(4, 1, 1, '#3a8a4a', 2.5, 10, 0), P(2, 1, 2, '#ff6f8f', 0, 18, 0)]);
+def('desert', 'agave', 'Agave', 0.2, 0, [P(2, 2, 2, '#5a9a6a'), P(8, 1, 1.5, '#6aaa7a', 0, 1, 0), P(1.5, 1, 8, '#6aaa7a', 0, 1, 0), P(5, 1, 5, '#7aba8a', 0, 2, 0)]);
+def('desert', 'tumbleweed', 'Tumbleweed', 0.15, 0, [P(4, 4, 4, '#a8803a'), P(3, 3, 3, '#b8903a', 0.5, 0.5, 0.5), P(2, 2, 2, '#98702a', -0.5, 2, -0.5)], { walk: 0.5 });
+def('desert', 'scorpion', 'Scorpion', 0.1, 0, [P(3, 2, 5, '#7a5a2a'), P(1, 4, 1, '#7a5a2a', 0, 2, 3), P(1, 1, 1, '#d6443c', 0, 6, 3), P(1, 1, 3, '#7a5a2a', -2, 1, -3), P(1, 1, 3, '#7a5a2a', 2, 1, -3)], { walk: 0.5 });
+def('desert', 'lizard', 'Lizard', 0.12, 0, [P(2, 1, 6, '#6a9a4a'), P(2, 1, 2, '#7aaa5a', 0, 0, -4), P(1, 1, 5, '#5a8a3a', 0, 0, 5), P(1, 1, 1, '#4a7a2a', -1.5, 0, -1), P(1, 1, 1, '#4a7a2a', 1.5, 0, -1)], { walk: 0.7 });
+def('desert', 'meerkat', 'Meerkat', 0.15, 0, [P(2, 5, 2, '#c8a06a'), P(2, 2, 2, '#c8a06a', 0, 5, -0.3), P(0.8, 0.8, 0.8, '#2a2a2a', -0.6, 6.4, -1.4), P(1, 1, 1, '#a8804a', 0, 0, 1.5)], { walk: 0.4 });
+def('desert', 'camel', 'Camel', 1.0, 10, [P(6, 6, 12, SAND, 0, 8, 0), P(4, 3, 4, SAND, 0, 14, 2), P(2, 7, 2, SAND, 0, 12, -7), P(2, 2, 4, SAND, 0, 19, -8.5), P(1.5, 8, 1.5, '#b89050', -2, 0, -4), P(1.5, 8, 1.5, '#b89050', 2, 0, -4), P(1.5, 8, 1.5, '#b89050', -2, 0, 4), P(1.5, 8, 1.5, '#b89050', 2, 0, 4), P(1, 3, 1, SAND, 0, 9, 7)], { walk: 0.3 });
+def('desert', 'sandrock', 'Sandstone Rock', 0.5, 0, [P(8, 5, 7, '#b8946a'), P(5, 3, 5, '#c8a478', 0, 5, 0)]);
+def('desert', 'mesa', 'Mesa', 3.4, 60, [P(26, 16, 22, '#a8643a'), P(26.4, 2, 22.4, '#c8845a', 0, 5, 0), P(26.4, 2, 22.4, '#8a4a2a', 0, 10, 0), P(22, 3, 18, '#b8744a', 0, 16, 0)]);
+def('desert', 'archrock', 'Rock Arch', 2.0, 30, [P(5, 12, 5, '#b8845a', -7, 0, 0), P(5, 12, 5, '#b8845a', 7, 0, 0), P(20, 4, 6, '#b8845a', 0, 12, 0)]);
+def('desert', 'adobe', 'Adobe House', 2.0, 0, [P(16, 8, 14, 'T'), P(17, 1, 15, '#a8845a', 0, 8, 0), P(17, 1, 1, '#b8946a', 0, 9, -7), P(3, 5, 1, '#4a2a14', 0, 0, -7.2), P(2, 2, 1, '#2a2a3a', -5, 4, -7.2), P(2, 2, 1, '#2a2a3a', 5, 4, -7.2)], { tints: ['#d8b878', '#c9a468', '#e0c898'] });
+def('desert', 'adobetower', 'Adobe Tower', 2.8, 40, [P(18, 10, 16, 'T'), P(12, 6, 12, 'T', 0, 10, 0), P(8, 3, 8, '#2f7a9a', 0, 16, 0), P(4, 2, 4, '#2f7a9a', 0, 19, 0), P(3, 5, 1, '#4a2a14', 0, 0, -8.2)], { tints: ['#d8b878', '#e0c898'] });
+def('desert', 'mosque', 'Mosque', 3.4, 120, [P(24, 10, 20, '#e8dcc0'), P(14, 5, 14, '#2f9a8a', 0, 10, 0), P(8, 3, 8, '#2f9a8a', 0, 15, 0), P(1, 3, 1, '#f2d34a', 0, 18, 0), P(3, 18, 3, '#e8dcc0', -11, 0, -9), P(3, 18, 3, '#e8dcc0', 11, 0, -9), P(4, 2, 4, '#2f9a8a', -11, 18, -9), P(4, 2, 4, '#2f9a8a', 11, 18, -9), P(6, 6, 1, '#2a3a4a', 0, 0, -10.2)]);
+def('desert', 'stall', 'Market Stall', 0.8, 0, [P(10, 3, 5, '#8a6a3a'), P(0.8, 8, 0.8, '#6a4a22', -4.5, 0, -2), P(0.8, 8, 0.8, '#6a4a22', 4.5, 0, -2), P(0.8, 8, 0.8, '#6a4a22', -4.5, 0, 2), P(0.8, 8, 0.8, '#6a4a22', 4.5, 0, 2), P(11, 1, 6, 'T', 0, 8, 0), P(2, 1, 2, '#d6443c', -3, 3, 0), P(2, 1, 2, '#e8b023', 0, 3, 0), P(2, 1, 2, '#3f9a5a', 3, 3, 0)], { tints: ['#d6443c', '#3d6fd1', '#e8b023'] });
+def('desert', 'desertwell', 'Desert Well', 0.6, 0, [P(8, 4, 8, '#b8946a'), P(5, 0.5, 5, '#3a6fd1', 0, 4, 0), P(1, 7, 1, '#6a4a22', -3.5, 4, 0), P(1, 7, 1, '#6a4a22', 3.5, 4, 0), P(8, 1, 1, '#6a4a22', 0, 11, 0), P(2, 2, 2, '#8a6a3a', 0, 8, 0)]);
+def('desert', 'pot', 'Clay Pot', 0.18, 0, [P(4, 4, 4, '#c8643a'), P(2, 2, 2, '#c8643a', 0, 4, 0), P(4.2, 0.6, 4.2, '#2a2a3a', 0, 2, 0)]);
+def('desert', 'tentd', 'Nomad Tent', 1.2, 0, [P(12, 3, 10, 'T'), P(10, 2, 8, 'T', 0, 3, 0), P(6, 2, 5, 'T', 0, 5, 0), P(3, 4, 0.5, '#3a2a1a', 0, 0, -5.2), P(1, 3, 1, '#6a4a22', 0, 7, 0)], { tints: ['#c8553d', '#e8dcc0', '#3d6fd1'] });
+def('desert', 'datepalm', 'Date Palm', 1.0, 0, [P(2, 12, 2, '#8a6a3a'), P(12, 1, 3, '#3a8a3a', 0, 12, 0), P(3, 1, 12, '#3a8a3a', 0, 12, 0), P(7, 1, 7, '#4aa04a', 0, 13, 0), P(1, 1, 1, '#6a3a1a', -1.2, 11, 1.2), P(1, 1, 1, '#6a3a1a', 1.2, 11, -1.2)]);
+def('desert', 'obelisk', 'Obelisk', 1.0, 30, [P(4, 2, 4, '#c8b080'), P(3, 18, 3, '#d8c090', 0, 2, 0), P(2, 2, 2, '#f2d34a', 0, 20, 0)]);
+def('desert', 'column', 'Column', 0.5, 0, [P(6, 2, 6, '#d8c8a0'), P(4, 10, 4, '#d8c8a0', 0, 2, 0), P(6, 2, 6, '#d8c8a0', 0, 12, 0)]);
+def('desert', 'brokencolumn', 'Broken Column', 0.35, 0, [P(5, 1.5, 5, '#d8c8a0'), P(4, 5, 4, '#d8c8a0', 0, 1.5, 0), P(3, 3, 8, '#cdbd95', 6, 0, 0)]);
+def('desert', 'sphinx', 'Sphinx', 3.0, 200, [P(10, 6, 22, '#d8bc84', 0, 0, 3), P(3, 3, 8, '#d8bc84', -4, 0, -9), P(3, 3, 8, '#d8bc84', 4, 0, -9), P(7, 8, 6, '#d8bc84', 0, 6, -8), P(9, 3, 2, '#3d6fd1', 0, 12, -8)]);
+def('desert', 'pyramid', 'Pyramid', 6.0, 840, [P(40, 4, 40, '#d8bc84'), P(34, 4, 34, '#d8bc84', 0, 4, 0), P(28, 4, 28, '#d2b67e', 0, 8, 0), P(22, 4, 22, '#d8bc84', 0, 12, 0), P(16, 4, 16, '#d2b67e', 0, 16, 0), P(10, 4, 10, '#d8bc84', 0, 20, 0), P(4, 3, 4, '#f2d34a', 0, 24, 0)]);
+def('desert', 'skull', 'Skull', 0.2, 0, [P(4, 3, 4, BONE), P(1, 1, 0.5, '#2a2a2a', -1, 1.5, -2), P(1, 1, 0.5, '#2a2a2a', 1, 1.5, -2), P(3, 1, 3, BONE, 0, 0, -0.5)]);
+// -- Arctic: hares and penguins to eat, bears and wolves, igloos and cabins, a research station, ice towers far out
+const SNOW = '#f2f6fa';
+def('arctic', 'snowdrift', 'Snowdrift', 0.3, 0, [P(8, 2, 6, SNOW), P(5, 2, 4, '#ffffff', 0, 2, 0)]);
+def('arctic', 'snowman', 'Snowman', 0.35, 0, [P(6, 5, 6, '#f6f9fc'), P(4, 4, 4, '#f6f9fc', 0, 5, 0), P(3, 3, 3, '#f6f9fc', 0, 9, 0), P(0.8, 0.8, 2, '#ff8a2a', 0, 10.5, -2), P(3, 2, 3, '#2a2a33', 0, 12, 0), P(0.8, 0.8, 0.5, '#2a2a2a', 0, 6, -3.1), P(0.8, 0.8, 0.5, '#2a2a2a', 0, 7.5, -3.1)]);
+def('arctic', 'icecrystal', 'Ice Crystal', 0.25, 0, [P(2, 5, 2, '#a8d8f0'), P(2, 3, 2, '#c8ecff', 1.5, 0, 1), P(1.5, 4, 1.5, '#98c8e8', -1.5, 0, -0.5)]);
+def('arctic', 'snowpine', 'Snowy Pine', 1.0, 0, [P(2, 3, 2, '#5a4a3a'), P(9, 3, 9, '#2d6a3a', 0, 3, 0), P(8, 1, 8, SNOW, 0, 6, 0), P(7, 3, 7, '#35783f', 0, 6, 0), P(6, 1, 6, SNOW, 0, 9, 0), P(5, 3, 5, '#3f8a46', 0, 9, 0), P(4, 1, 4, SNOW, 0, 12, 0), P(2, 3, 2, '#4a9a50', 0, 12, 0), P(1, 1, 1, '#ffffff', 0, 15, 0)]);
+def('arctic', 'deadtree', 'Bare Tree', 0.8, 0, [P(2, 10, 2, '#5a4a42'), P(6, 1, 1, '#5a4a42', 0, 7, 0), P(1, 1, 5, '#5a4a42', 0, 5, 0), P(1, 4, 1, '#5a4a42', 3, 7, 0), P(2, 1, 2, SNOW, 0, 10, 0)]);
+def('arctic', 'penguin', 'Penguin', 0.15, 0, [P(3, 5, 3, '#1a1a2a'), P(2, 4, 0.5, '#f6f6f6', 0, 0.5, -1.6), P(3, 2, 3, '#1a1a2a', 0, 5, 0), P(1, 0.8, 1.2, '#f29a2a', 0, 5.5, -2), P(1, 0.5, 1.5, '#f29a2a', -0.8, 0, -1), P(1, 0.5, 1.5, '#f29a2a', 0.8, 0, -1)], { walk: 0.3 });
+def('arctic', 'seal', 'Seal', 0.5, 0, [P(5, 3, 10, '#8a8a92', 0, 1, 0), P(4, 3, 4, '#8a8a92', 0, 2, -6), P(1, 1, 3, '#6a6a72', -3, 1, -2), P(1, 1, 3, '#6a6a72', 3, 1, -2), P(3, 2, 4, '#7a7a82', 0, 0, 6)], { walk: 0.15 });
+def('arctic', 'polarbear', 'Polar Bear', 1.2, 40, [P(8, 7, 12, '#f2f2f6', 0, 3, 0), P(5, 5, 5, '#f2f2f6', 0, 6, -8), P(1.5, 1.5, 1, '#2a2a2a', 0, 6, -10.7), P(3, 4, 3, '#e6e6ea', -3, 0, -4), P(3, 4, 3, '#e6e6ea', 3, 0, -4), P(3, 4, 3, '#e6e6ea', -3, 0, 4), P(3, 4, 3, '#e6e6ea', 3, 0, 4), P(1.5, 1.5, 1, '#e6e6ea', -2, 11, -7), P(1.5, 1.5, 1, '#e6e6ea', 2, 11, -7)], { walk: 0.3 });
+def('arctic', 'arcticfox', 'Arctic Fox', 0.25, 0, [P(3, 3, 6, '#f4f6fa', 0, 2, 0), P(3, 3, 3, '#f4f6fa', 0, 3, -4), P(2, 2, 5, '#e8ecf2', 0, 3, 5), P(1, 1, 1, '#2a2a33', -1, 6, -4), P(1, 1, 1, '#2a2a33', 1, 6, -4), P(1, 2, 1, '#d8dce4', -1, 0, -2), P(1, 2, 1, '#d8dce4', 1, 0, 2)], { walk: 0.7 });
+def('arctic', 'hare', 'Snow Hare', 0.12, 0, [P(3, 3, 4, '#f6f8fb'), P(2, 2, 2, '#f6f8fb', 0, 3, -2), P(1, 3, 1, '#f6f8fb', -0.7, 5, -2), P(1, 3, 1, '#f6f8fb', 0.7, 5, -2), P(1, 1, 1, '#ffffff', 0, 2, 2.5)], { walk: 0.8 });
+def('arctic', 'reindeer', 'Reindeer', 0.8, 20, [P(4, 4, 8, '#9a7a5a', 0, 5, 0), P(3, 3, 3, '#9a7a5a', 0, 8, -5), P(1, 4, 1, BONE, -1.5, 11, -5), P(1, 4, 1, BONE, 1.5, 11, -5), P(3, 1, 1, BONE, 0, 14, -5), P(1, 5, 1, '#7a5a3a', -1.2, 0, -3), P(1, 5, 1, '#7a5a3a', 1.2, 0, -3), P(1, 5, 1, '#7a5a3a', -1.2, 0, 3), P(1, 5, 1, '#7a5a3a', 1.2, 0, 3), P(2, 2, 3, '#f2ede0', 0, 6, -4)], { walk: 0.35 });
+def('arctic', 'wolf', 'Wolf', 0.4, 20, [P(3, 4, 8, '#8a8a92', 0, 4, 0), P(3, 3, 4, '#8a8a92', 0, 6, -5.5), P(1, 1, 1, '#5a5a62', -1, 9, -5), P(1, 1, 1, '#5a5a62', 1, 9, -5), P(2, 2, 5, '#7a7a82', 0, 5, 6), P(1, 4, 1, '#6a6a72', -1, 0, -2.5), P(1, 4, 1, '#6a6a72', 1, 0, -2.5), P(1, 4, 1, '#6a6a72', -1, 0, 2.5), P(1, 4, 1, '#6a6a72', 1, 0, 2.5)], { walk: 0.6 });
+def('arctic', 'igloo', 'Igloo', 1.8, 0, [P(14, 4, 14, '#eef4f8'), P(11, 3, 11, '#f4f8fb', 0, 4, 0), P(7, 2, 7, '#fafcfe', 0, 7, 0), P(5, 4, 5, '#eef4f8', 0, 0, -8), P(3, 3, 0.5, '#1a2a3a', 0, 0, -10.3)]);
+def('arctic', 'snowcabin', 'Snow Cabin', 2.0, 0, [P(14, 7, 12, '#8a5a30'), P(16, 2, 14, SNOW, 0, 7, 0), P(12, 2, 10, '#ffffff', 0, 9, 0), P(3, 5, 1, '#3a2414', 0, 0, -6.2), P(3, 3, 1, '#8fd0f0', 4, 2, -6.2), P(2, 4, 2, IRON, 4, 8, 2)]);
+def('arctic', 'sled', 'Sled', 0.5, 0, [P(1, 1, 10, '#5a4a42', -2, 0, 0), P(1, 1, 10, '#5a4a42', 2, 0, 0), P(6, 2, 9, '#8a5a30', 0, 1, 0), P(6, 1, 1, '#5a4a42', 0, 3, 4.5)]);
+def('arctic', 'snowmobile', 'Snowmobile', 0.8, 0, [P(5, 3, 10, 'T', 0, 2, 0), P(4, 2, 4, '#2a2a2a', 0, 5, 2), P(1, 1, 8, IRON, -2.5, 0, -1), P(1, 1, 8, IRON, 2.5, 0, -1), P(3, 2, 6, '#2a2a2a', 0, 0, 3), P(4, 2, 0.5, GLASS, 0, 5, -3)], { tints: ['#d6443c', '#e8b023', '#3d6fd1'] });
+def('arctic', 'antenna', 'Radio Mast', 0.5, 0, [P(1, 18, 1, '#c8ccd4'), P(4, 1, 1, '#c8ccd4', 0, 14, 0), P(1, 1, 4, '#c8ccd4', 0, 10, 0), P(2, 2, 2, '#d6443c', 0, 18, 0)]);
+def('arctic', 'station', 'Research Station', 3.0, 60, [P(22, 8, 14, '#e8ecf0'), P(23, 1, 15, '#d6443c', 0, 8, 0), P(8, 4, 8, '#cfe8f5', 6, 9, 0), P(3, 5, 1, '#3a4a5a', 0, 0, -7.2), P(3, 3, 0.5, GLASS, -6, 3, -7.2), P(3, 3, 0.5, GLASS, 6, 3, -7.2)]);
+def('arctic', 'icespire', 'Ice Spire', 3.0, 100, [P(10, 6, 10, '#a8d8f0'), P(8, 8, 8, '#b8e0f4', 0, 6, 0), P(5, 8, 5, '#c8ecff', 0, 14, 0), P(2, 6, 2, '#d8f4ff', 0, 22, 0)]);
+def('arctic', 'iceberg', 'Iceberg', 2.2, 30, [P(16, 5, 14, '#c8e8f8'), P(12, 5, 10, '#d8f0fc', 2, 5, 0), P(6, 5, 6, '#e8f8ff', 3, 10, 1)]);
+def('arctic', 'fishinghut', 'Ice Fishing Hut', 1.0, 0, [P(8, 6, 8, '#8a6a42'), P(9, 1, 9, '#5a4a42', 0, 6, 0), P(2, 4, 0.5, '#2a1a0a', 0, 0, -4.2), P(1, 1, 1, '#ffb03a', 3, 4, -4.2)]);
+def('arctic', 'snowrock', 'Snowy Rock', 0.4, 0, [P(6, 3, 5, '#9aa4ac'), P(5, 1.5, 4, SNOW, 0, 3, 0)]);
+// -- Volcano: lava rocks and newts to eat, golems, mines, forges, obsidian spires and, far out, a whole volcano
+const ASH = '#2a2428', GLOW = '#ff6a1a';
+def('volcano', 'lavarock', 'Lava Rock', 0.25, 0, [P(6, 3, 5, ASH), P(3, 0.6, 3, GLOW, 0, 3, 0), P(2, 1, 2, '#3a3438', -2, 3, 1)]);
+def('volcano', 'ashpile', 'Ash Pile', 0.2, 0, [P(6, 2, 6, '#4a4448'), P(3, 1.5, 3, '#5a5458', 0, 2, 0)]);
+def('volcano', 'obsidian', 'Obsidian Shard', 0.3, 0, [P(3, 6, 3, '#1a1620'), P(2, 4, 2, '#2a2438', 1.5, 0, 1), P(1, 3, 1, '#3a3050', -1.5, 0, -1)]);
+def('volcano', 'obsidianspire', 'Obsidian Spire', 1.2, 20, [P(6, 8, 6, '#1a1620'), P(4, 8, 4, '#221c2c', 0, 8, 0), P(2, 8, 2, '#2a2438', 0, 16, 0), P(1, 5, 1, '#3a3050', 0, 24, 0)]);
+def('volcano', 'vent', 'Steam Vent', 0.3, 0, [P(6, 2, 6, '#3a3438'), P(3, 1, 3, GLOW, 0, 2, 0), P(2, 3, 2, '#8a8a92', 0, 3, 0)]);
+def('volcano', 'geyser', 'Geyser', 0.4, 0, [P(6, 2, 6, '#4a4448'), P(2, 8, 2, '#e8e8f0', 0, 2, 0), P(4, 3, 4, '#f4f4fa', 0, 9, 0)]);
+def('volcano', 'magmanewt', 'Magma Newt', 0.12, 0, [P(2, 1, 5, '#3a2a28'), P(1.5, 0.5, 4, GLOW, 0, 1, 0), P(2, 1, 2, '#3a2a28', 0, 0, -3), P(1, 1, 4, '#ff8a2a', 0, 0, 4)], { walk: 0.6 });
+def('volcano', 'salamander', 'Salamander', 0.25, 0, [P(3, 2, 7, '#3a2a28'), P(3.2, 0.5, 1.5, '#ff8a2a', 0, 2, -1), P(3.2, 0.5, 1.5, '#ff8a2a', 0, 2, 2), P(3, 2, 3, '#3a2a28', 0, 0, -5), P(2, 1, 5, GLOW, 0, 0, 6), P(1, 1, 1, '#2a1a18', -2, 0, -2), P(1, 1, 1, '#2a1a18', 2, 0, 2)], { walk: 0.5 });
+def('volcano', 'lavagolem', 'Lava Golem', 1.4, 40, [P(8, 8, 6, ASH, 0, 6, 0), P(4, 3, 0.6, GLOW, 0, 9, -3.2), P(5, 4, 5, '#3a3438', 0, 14, 0), P(1, 1, 0.5, '#ffb03a', -1.2, 15.5, -2.6), P(1, 1, 0.5, '#ffb03a', 1.2, 15.5, -2.6), P(3, 8, 3, ASH, -6, 4, 0), P(3, 8, 3, ASH, 6, 4, 0), P(3, 6, 3, ASH, -2.5, 0, 0), P(3, 6, 3, ASH, 2.5, 0, 0)], { walk: 0.2 });
+def('volcano', 'ember', 'Ember', 0.1, 0, [P(2, 2, 2, '#ff8a2a'), P(1, 1, 1, '#ffd34d', 0.5, 2, 0.5)], { walk: 0.8 });
+def('volcano', 'minehut', 'Miner\'s Hut', 1.5, 0, [P(12, 6, 10, '#6a5a4a'), P(13, 1, 11, '#3a3438', 0, 6, 0), P(3, 4, 0.5, '#2a1a0a', 0, 0, -5.2), P(1, 1, 1, '#ffb03a', 3, 4, -5.2), P(1, 1, 1, '#ffb03a', -3, 4, -5.2)]);
+def('volcano', 'minecart', 'Mine Cart', 0.4, 0, [P(6, 3, 5, '#4a4a52'), P(1, 1.5, 1, '#2a2a2a', -2.5, 0, -2), P(1, 1.5, 1, '#2a2a2a', 2.5, 0, -2), P(1, 1.5, 1, '#2a2a2a', -2.5, 0, 2), P(1, 1.5, 1, '#2a2a2a', 2.5, 0, 2), P(4, 1, 3, '#b8864a', 0, 3, 0)]);
+def('volcano', 'mineshaft', 'Mine Shaft', 1.8, 0, [P(2, 12, 2, '#6a4a2a', -8, 0, 0), P(2, 12, 2, '#6a4a2a', 8, 0, 0), P(18, 2, 2, '#6a4a2a', 0, 12, 0), P(14, 10, 0.5, '#0a0810', 0, 0, -1.2), P(22, 5, 10, '#3a3438', 0, 0, 3)]);
+def('volcano', 'forge', 'Forge', 2.0, 0, [P(14, 8, 12, '#4a4448'), P(15, 1, 13, ASH, 0, 8, 0), P(3, 12, 3, '#3a3438', 4, 8, 2), P(4, 3, 1, GLOW, -2, 2, -6.2), P(4, 3, 2, '#2a2a33', 3, 0, -7)]);
+def('volcano', 'ruintower', 'Ruined Tower', 2.5, 30, [P(10, 16, 10, '#4a4448'), P(10, 2, 4, '#4a4448', 0, 16, -3), P(4, 3, 4, '#4a4448', 3, 16, 3), P(2, 4, 0.5, GLOW, 0, 8, -5.2), P(2, 3, 0.5, '#ffb03a', 3, 12, -5.2)]);
+def('volcano', 'volcanocone', 'Volcano', 6.0, 840, [P(44, 6, 44, '#3a3438'), P(36, 6, 36, '#322c30', 0, 6, 0), P(28, 6, 28, ASH, 0, 12, 0), P(20, 6, 20, '#241e22', 0, 18, 0), P(14, 2, 14, '#1a1618', 0, 24, 0), P(10, 1, 10, GLOW, 0, 26, 0), P(6, 3, 6, '#ffb03a', 0, 27, 0)]);
+def('volcano', 'charredtree', 'Charred Tree', 0.8, 0, [P(2, 10, 2, '#1a1618'), P(6, 1, 1, '#1a1618', 0, 7, 0), P(1, 1, 5, '#1a1618', 0, 5, 0), P(1, 1, 1, GLOW, 3, 8, 0), P(1, 1, 1, GLOW, 0, 6, 2.5)]);
+def('volcano', 'smokestack', 'Smokestack', 1.0, 0, [P(6, 14, 6, '#3a3438'), P(4, 3, 4, ASH, 0, 14, 0), P(3, 4, 3, '#6a6a72', 0, 17, 0)]);
+def('volcano', 'anvil', 'Anvil', 0.2, 0, [P(4, 2, 3, '#2a2a33'), P(6, 1, 3, '#2a2a33', 0, 2, 0), P(2, 1, 2, '#2a2a33', -3, 2, 0)]);
+
 TYPES.sort((a, b) => b.b - a.b);                                  // biggest first: they are placed first, the small fill the gaps
 TYPES.forEach((t, i) => { t.i = i; });
 const BIGGEST = TYPES[0].b;
@@ -190,9 +298,13 @@ const BIOMES = {
   village: { name: 'Village', road: 0.4, style: 'lane', prio: 1 },
   forest: { name: 'Forest', road: 0.15, style: 'trail', prio: 0 },
   city: { name: 'City', road: 1, style: 'street', prio: 2 },
+  jurassic: { name: 'Jurassic Park', road: 0.5, style: 'park', prio: 1.5 },
+  desert: { name: 'Desert', road: 0.35, style: 'track', prio: 0.8 },
+  arctic: { name: 'Arctic', road: 0.2, style: 'snowpath', prio: 0.6 },
+  volcano: { name: 'Volcano', road: 0.12, style: 'ashpath', prio: 0.4 },
 };
 // width of a road and of the pavement or verge each side of it, in units of the ring's scale (see cellInfo)
-const STYLES = { street: { w: 3.2, verge: 0.9 }, lane: { w: 1.6, verge: 0.4 }, trail: { w: 0.8, verge: 0 } };
+const STYLES = { street: { w: 3.2, verge: 0.9 }, lane: { w: 1.6, verge: 0.4 }, trail: { w: 0.8, verge: 0 }, park: { w: 2.2, verge: 0.5 }, track: { w: 1.4, verge: 0.3 }, snowpath: { w: 1.2, verge: 0.3 }, ashpath: { w: 1.2, verge: 0.2 } };
 const vnoise = (u, v, K, seed) => {
   const iu = Math.floor(u), iv = Math.floor(v), fu = u - iu, fv = v - iv;
   const h = (a, b) => hash(seed, ((a % K) + K) % K, b) / TWO32;
@@ -223,7 +335,7 @@ function rawBiome(x, z) {
   }
   if (bj === 0) return 'village';                                 // every centre in the first ring row is a village, so the start is one big village with natural edges
   const h = hash(SEED, bk, bj, 33) / TWO32;
-  return h < 0.28 ? 'city' : h < 0.62 ? 'forest' : 'village';
+  return h < 0.15 ? 'city' : h < 0.32 ? 'forest' : h < 0.44 ? 'jurassic' : h < 0.57 ? 'desert' : h < 0.69 ? 'arctic' : h < 0.78 ? 'volcano' : 'village';
 }
 // the road on one cell edge: its style, or null. axis 0: the line x = k * C, between cells (k - 1, m) and (k, m);
 // axis 1: the line z = k * C, between (m, k - 1) and (m, k). A line is a road along its whole length when its hash is
@@ -246,9 +358,14 @@ function plotKind(c) {
   const choose = list => { let tot = 0; for (const e of list) tot += e[1]; let a = h * tot; for (const e of list) if ((a -= e[1]) < 0) return e[0]; return list[list.length - 1][0]; };
   if (c.biome === 'city') return choose([['built', 70], ['park', 14], ['plaza', 6], ['lot', 10]]);
   if (c.biome === 'forest') return d < 200 ? choose([['dense', 28], ['mixed', 40], ['clearing', 14], ['rocky', 10], ['pond', 8]]) : choose([['dense', 25], ['mixed', 28], ['clearing', 12], ['rocky', 10], ['pond', 7], ['grove', 18]]);
+  if (c.biome === 'jurassic') return choose([['jungle', 28], ['paddock', 20], ['nest', 14], ['visitor', 8], ['lagoon', 14], ['compound', 16]]);
+  if (c.biome === 'desert') return choose([['dunes', 30], ['oasis', 12], ['town', 18], ['ruins', 14], ['canyon', 14], ['camp', 12]]);
+  if (c.biome === 'arctic') return choose([['snowfield', 28], ['pinewood', 24], ['frozenlake', 14], ['outpost', 10], ['iglooville', 12], ['glacier', 12]]);
+  if (c.biome === 'volcano') return choose([['ashfield', 30], ['lavaflow', 20], ['crater', 12], ['mine', 14], ['forge', 10], ['spires', 14]]);
   if (d < 60) return choose([['homestead', 30], ['pasture', 22], ['meadow', 16], ['orchard', 14], ['green', 10], ['pond', 8]]);
   return choose([['homestead', 24], ['farm', 14], ['pasture', 14], ['field', 16], ['orchard', 9], ['green', 7], ['pond', 7], ['meadow', 9]]);
 }
+const POOLS_OF = { pond: [0.27, 'water'], lagoon: [0.34, 'water'], oasis: [0.22, 'water'], frozenlake: [0.34, 'ice'], crater: [0.26, 'lava'] };
 const INFO = new Map();
 function cellInfo(t, i, j) {                                      // everything about one cell that ground and layout both need
   const key = t + ':' + i + ':' + j;
@@ -263,9 +380,14 @@ function cellInfo(t, i, j) {                                      // everything 
   const mg = sd => c.road[sd] ? (STYLES[c.road[sd]].w / 2 + STYLES[c.road[sd]].verge) * c.TS : 0.04 * C;
   c.mg = { w: mg('w'), e: mg('e'), n: mg('n'), s: mg('s') };
   c.inner = { x0: x0 + c.mg.w, x1: c.x1 - c.mg.e, z0: z0 + c.mg.n, z1: c.z1 - c.mg.s };
-  if (c.kind === 'pond') {
+  const pool = POOLS_OF[c.kind];                                  // a pond, lagoon, oasis, frozen lake or lava lake: [radius share of the cell, liquid]
+  if (pool) {
     const o = (hash(SEED, t, i, j, 11) / TWO32 - 0.5) * 0.2 * C, o2 = (hash(SEED, t, i, j, 12) / TWO32 - 0.5) * 0.2 * C;
-    c.pond = { x: c.cx + o, z: c.cz + o2, r: 0.27 * C };
+    c.pond = { x: c.cx + o, z: c.cz + o2, r: pool[0] * C, liquid: pool[1] };
+  }
+  if (c.kind === 'lavaflow') {                                    // a river of lava across the plot
+    const horiz = (hash(SEED, t, i, j, 15) & 1) === 1, off = (hash(SEED, t, i, j, 16) / TWO32 - 0.5) * 0.3 * C;
+    c.river = { horiz, at: (horiz ? c.cz : c.cx) + off, w: 0.16 * C, liquid: 'lava' };
   }
   if (INFO.size > 6000) INFO.clear();
   INFO.set(key, c);
@@ -279,8 +401,14 @@ const PAL = {
   village: { grass: ['#6fae4a', '#79b952', '#67a547'], pasture: ['#80c05a', '#78b852', '#88c862'], lane: ['#b89a68', '#aa8c5c'], verge: ['#86c25e', '#7cb856'], crops: [['#bdb458', '#a9b856'], ['#9ab04a', '#86a040'], ['#d4a050', '#c08c40']] },
   forest: { moss: ['#3d7a38', '#36702f', '#44843f'], clearing: ['#5a9a46', '#52903e'], rocky: ['#6a7a60', '#62725a'], grove: ['#2f6a30', '#2a6029'], trail: ['#7a5a3a', '#6e5032'] },
   city: { paving: ['#8c8e9e', '#9496a6', '#85879a'], road: ['#3a3c49', '#41434f'], pavement: ['#b2b4c2', '#a8aaba'], park: ['#5fa84a', '#58a044'], plaza: ['#c8c4b8', '#beb9ac'], lot: ['#4a4c58', '#50525e'] },
+  jurassic: { jungle: ['#2a6a2c', '#256028', '#307434'], clearing: ['#4a8a3a', '#428234'], mud: ['#6a5a3a', '#5e4e32'], paddock: ['#5a9a3e', '#52903a'], compound: ['#8a8a82', '#7e7e76'], visitor: ['#a0a098', '#94948c'], road: ['#55524c', '#5c5952'], verge: ['#7a7468', '#726a5e'] },
+  desert: { sand: ['#e0c68a', '#d8bc7e', '#e6cf96'], dune: ['#ecd49c', '#e4cc92'], rock: ['#b8946a', '#b08c62'], town: ['#cdb07a', '#c4a872'], oasis: ['#6aa04a', '#62984a'], road: ['#c0996a', '#b8905e'], verge: ['#d8b878', '#d0b070'] },
+  arctic: { snow: ['#f0f4f8', '#e6edf3', '#f6f9fc'], wood: ['#dde7ee', '#d3dfe8'], rocky: ['#b8c4cc', '#aebac2'], outpost: ['#c8d2da', '#bec8d0'], glacier: ['#cfe6f2', '#c4dcea'], road: ['#c0ccd6', '#b6c2cc'], verge: ['#e8eef4', '#e0e8f0'] },
+  volcano: { ash: ['#3a3438', '#332e32', '#403a3e'], rock: ['#2a2528', '#262124'], hot: ['#4a2a26', '#442420'], mine: ['#4a4448', '#443e42'], spires: ['#2e262c', '#2a2228'], road: ['#2a2428', '#302a2e'], verge: ['#4a3e42', '#44383c'] },
   water: ['#3a78c8', '#4486d4'], sand: ['#d8c98a', '#cfc080'],
+  ice: ['#bfe0f0', '#b4d8ea'], snowrim: ['#f2f6fa', '#e8eef4'], lava: ['#ff6a1a', '#ff8a2a', '#ffb03a'], lavarim: ['#2a2224', '#34292c'],
 };
+const ROAD_PAL = { street: ['city', 'road', 'pavement'], lane: ['village', 'lane', 'verge'], trail: ['forest', 'trail', 'trail'], park: ['jurassic', 'road', 'verge'], track: ['desert', 'road', 'verge'], snowpath: ['arctic', 'road', 'verge'], ashpath: ['volcano', 'road', 'verge'] };
 function groundColour(x, z, tx, tz) {                             // the colour of one ground tile, as [r, g, b] from 0 to 1
   const c = cellAt(x, z), h = hash(tx, tz, 77), P_ = PAL[c.biome], pick = arr => arr[h % arr.length];
   let hex = null;
@@ -288,16 +416,22 @@ function groundColour(x, z, tx, tz) {                             // the colour 
   for (const sd of ['w', 'e', 'n', 's']) {
     const st = c.road[sd]; if (!st) continue;
     const S = STYLES[st], dist = sd === 'w' ? x - c.x0 : sd === 'e' ? c.x1 - x : sd === 'n' ? z - c.z0 : c.z1 - z;
-    if (dist < S.w / 2 * c.TS) { hex = pick(st === 'street' ? PAL.city.road : st === 'lane' ? PAL.village.lane : PAL.forest.trail); break; }
-    if (dist < (S.w / 2 + S.verge) * c.TS && !hex) hex = pick(st === 'street' ? PAL.city.pavement : PAL.village.verge);
+    const rp = ROAD_PAL[st];
+    if (dist < S.w / 2 * c.TS) { hex = pick(PAL[rp[0]][rp[1]]); break; }
+    if (dist < (S.w / 2 + S.verge) * c.TS && !hex) hex = pick(PAL[rp[0]][rp[2]]);
   }
   if (!hex) {
     const k = c.kind;
-    if (c.pond) { const q = Math.hypot(x - c.pond.x, z - c.pond.z); if (q < c.pond.r) hex = pick(PAL.water); else if (q < c.pond.r * 1.16) hex = pick(PAL.sand); }
+    if (c.pond) { const q = Math.hypot(x - c.pond.x, z - c.pond.z), L = c.pond.liquid; if (q < c.pond.r) hex = pick(L === 'lava' ? PAL.lava : L === 'ice' ? PAL.ice : PAL.water); else if (q < c.pond.r * 1.16) hex = pick(L === 'lava' ? PAL.lavarim : L === 'ice' ? PAL.snowrim : PAL.sand); }
+    if (!hex && c.river) { const q = Math.abs((c.river.horiz ? z : x) - c.river.at); if (q < c.river.w / 2) hex = pick(PAL.lava); else if (q < c.river.w / 2 + 0.05 * c.C) hex = pick(PAL.lavarim); }
     if (!hex) {
       if (c.biome === 'village') hex = k === 'field' ? PAL.village.crops[hash(SEED, c.t, c.i, c.j, 13) % 3][(hash(SEED, c.t, c.i, c.j, 14) & 1 ? tx : tz) & 1] : k === 'pasture' || k === 'green' || k === 'orchard' ? pick(PAL.village.pasture) : pick(PAL.village.grass);
       else if (c.biome === 'forest') hex = pick(k === 'clearing' ? PAL.forest.clearing : k === 'rocky' ? PAL.forest.rocky : k === 'grove' ? PAL.forest.grove : PAL.forest.moss);
-      else hex = pick(k === 'park' ? PAL.city.park : k === 'plaza' ? PAL.city.plaza : k === 'lot' ? PAL.city.lot : PAL.city.paving);
+      else if (c.biome === 'city') hex = pick(k === 'park' ? PAL.city.park : k === 'plaza' ? PAL.city.plaza : k === 'lot' ? PAL.city.lot : PAL.city.paving);
+      else if (c.biome === 'jurassic') hex = pick(k === 'nest' ? PAL.jurassic.clearing : k === 'paddock' ? PAL.jurassic.paddock : k === 'compound' ? PAL.jurassic.compound : k === 'visitor' ? PAL.jurassic.visitor : k === 'lagoon' ? PAL.jurassic.mud : PAL.jurassic.jungle);
+      else if (c.biome === 'desert') hex = pick(k === 'town' ? PAL.desert.town : k === 'canyon' ? PAL.desert.rock : k === 'oasis' ? PAL.desert.oasis : k === 'ruins' || k === 'camp' ? PAL.desert.dune : PAL.desert.sand);
+      else if (c.biome === 'arctic') hex = pick(k === 'pinewood' ? PAL.arctic.wood : k === 'outpost' || k === 'iglooville' ? PAL.arctic.outpost : k === 'glacier' ? PAL.arctic.glacier : PAL.arctic.snow);
+      else hex = pick(k === 'lavaflow' || k === 'crater' ? PAL.volcano.hot : k === 'mine' || k === 'forge' ? PAL.volcano.mine : k === 'spires' ? PAL.volcano.spires : PAL.volcano.ash);
     }
   }
   const n = parseInt(hex.slice(1), 16), j = 0.94 + 0.12 * ((h >>> 8) & 255) / 255;
@@ -305,7 +439,7 @@ function groundColour(x, z, tx, tz) {                             // the colour 
 }
 
 // ------------------------------------------------------------------ the tools every layout uses
-const LAYOUTS = { city: {}, village: {}, forest: {} };
+const LAYOUTS = { city: {}, village: {}, forest: {}, jurassic: {}, desert: {}, arctic: {}, volcano: {} };
 const DENSITY = 3.2;                                              // how thickly everything is scattered (the counts in the layouts are multiplied by this)
 const yawOf = (dx, dz) => Math.atan2(-dx, -dz);                   // models face -z, so this turns a model to face (dx, dz)
 const FACE = { w: [-1, 0], e: [1, 0], n: [0, -1], s: [0, 1] };    // from a plot towards the road on that side
@@ -334,10 +468,12 @@ function makeCtx(c, cull) {
     if (x - ex < c.x0 || x + ex > c.x1 || z - ez < c.z0 || z + ez > c.z1 || dd - r < SPAWN_CLEAR) return null;
     const ci = c.inner;
     if (!o.out && (x - ex < ci.x0 - 1e-6 || x + ex > ci.x1 + 1e-6 || z - ez < ci.z0 - 1e-6 || z + ez > ci.z1 + 1e-6)) return null;   // on the road or its verge
-    if (c.pond && !o.water && Math.hypot(x - c.pond.x, z - c.pond.z) < c.pond.r * 1.05 + Math.max(ex, ez) * 0.5) return null;       // in the water
+    if (c.pond && !o.water && Math.hypot(x - c.pond.x, z - c.pond.z) < c.pond.r * 1.05 + Math.max(ex, ez) * 0.5) return null;       // in the water, ice or lava
+    if (c.river && !o.water && Math.abs((c.river.horiz ? z : x) - c.river.at) - (c.river.horiz ? ez : ex) < c.river.w / 2 + 0.02 * c.C) return null;   // in the river
     for (const a of objs) if (Math.abs(a.x - x) < (a.ex + ex) * 0.9 && Math.abs(a.z - z) < (a.ez + ez) * 0.9) return null;
     const ob = { x, z, ty: ty.i, s, r, h: m.h * s, yaw, ex, ez, br: 0.88 + 0.22 * q3, state: 0, slot: -1, ghost: r < cull };
     if (o.pen) ob.pen = o.pen;
+    if (o.water) ob.wet = true;
     objs.push(ob);
     return ob;
   };
@@ -357,17 +493,25 @@ function makeCtx(c, cull) {
     for (let k = 0; k < n; k++) { const a = (k + 0.5) / n * Math.PI * 2 + (o.turn || 0), id = ctx.pick(Array.isArray(ids) ? ids : [ids]); if (id) ctx.add(id, cx + Math.cos(a) * rad, cz + Math.sin(a) * rad, { ...o, yaw: o.facing ? yawOf(-Math.cos(a), -Math.sin(a)) : o.yaw }); }
   };
   // a row of fence round a rectangle, with a gap (gate) in one side: gate { side, at, w }
-  ctx.fence = (r, gate) => {
-    const s = Sc, m = model(BYID.fence), seg = 2 * m.hw * s * 0.98;
+  ctx.fence = (r, gate, fid = 'fence') => {
+    const s = Sc, m = model(BYID[fid]), seg = 2 * m.hw * s * 0.98;
     for (const [sd, a0, a1, fix] of [['n', r.x0, r.x1, r.z0], ['s', r.x0, r.x1, r.z1], ['w', r.z0, r.z1, r.x0], ['e', r.z0, r.z1, r.x1]]) {
       const n = Math.max(1, Math.floor((a1 - a0) / seg)), step = (a1 - a0) / n;
       for (let k = 0; k < n; k++) {
         const a = a0 + step * (k + 0.5);
         if (gate && sd === gate.side && Math.abs(a - gate.at) < gate.w / 2) continue;
-        if (sd === 'n' || sd === 's') ctx.add('fence', a, fix, { yaw: 0, s }); else ctx.add('fence', fix, a, { yaw: Math.PI / 2, s });
+        if (sd === 'n' || sd === 's') ctx.add(fid, a, fix, { yaw: 0, s }); else ctx.add(fid, fix, a, { yaw: Math.PI / 2, s });
       }
     }
   };
+  // a herd of n of one animal in a pen: places each at a random spot in the pen, trying several times
+  ctx.herd = (id, rect, n, o = {}) => {
+    for (let k = 0, put = 0; k < n * 8 && put < n; k++) {
+      const x = rect.x0 + ctx.rnd() * (rect.x1 - rect.x0), z = rect.z0 + ctx.rnd() * (rect.z1 - rect.z0);
+      if (ctx.add(id, x, z, o)) put++;
+    }
+  };
+  ctx.herdSize = (id, rect) => Math.max(2, Math.min(9, Math.round((rect.x1 - rect.x0) * (rect.z1 - rect.z0) / (Math.PI * Math.pow(BYID[id].b * Sc, 2) * 10))));
   // a plot's own frame, with the front on side sd: u along the front (0 to 1), v inward (0 at the front to 1 at the back)
   ctx.frame = sd => {
     const r = c.inner, horiz = sd === 'n' || sd === 's', W = horiz ? r.x1 - r.x0 : r.z1 - r.z0, D = horiz ? r.z1 - r.z0 : r.x1 - r.x0;
@@ -561,11 +705,12 @@ LAYOUTS.village.green = ctx => {
   ctx.ring('appletree', mx, mz, rad * 1.7, 6, { turn: 0.5, s: ctx.Sc });
   ctx.scatter('picnic', 0.5, r); ctx.scatter(['duck', 'chicken', 'cat', 'dog'], 2, r); ctx.scatter(['barrel', 'bucket', 'crate'], 0.8, r); ctx.scatter(FLOWERS, 12, r); ctx.scatter('rabbit', 1, r);
 };
-function pondLayout(ctx, plants) {                                // shared by village and forest: a pond with ducks, reeds and stones
+function pondLayout(ctx, plants, o = {}) {                       // a pond (or lagoon, oasis, frozen lake, lava lake) with creatures on it, plants round it and stones beyond
   const c = ctx.c, p = c.pond, box = { x0: p.x - p.r, x1: p.x + p.r, z0: p.z - p.r, z1: p.z + p.r };
-  ctx.ring('reed', p.x, p.z, p.r * 1.02, 22, { turn: 0.2, s: ctx.Sc, water: true }); ctx.ring('reed', p.x, p.z, p.r * 1.12, 16, { turn: 0.5, s: ctx.Sc, water: true });
-  ctx.scatter('duck', 3.2, shrink(box, p.r * 0.25), { pen: box, water: true });
-  ctx.ring(['rock', 'rock', 'bush'], p.x, p.z, p.r * 1.3, 8, { turn: 0.15 });
+  const edge = o.edge === undefined ? 'reed' : o.edge, life = o.life === undefined ? 'duck' : o.life, rim = o.rim || ['rock', 'rock', 'bush'];
+  if (edge) { ctx.ring(edge, p.x, p.z, p.r * 1.02, 22, { turn: 0.2, s: ctx.Sc, water: true }); ctx.ring(edge, p.x, p.z, p.r * 1.12, 16, { turn: 0.5, s: ctx.Sc, water: true }); }
+  if (life) ctx.scatter(life, o.lifePer || 3.2, shrink(box, p.r * 0.25), { pen: box, water: true });
+  ctx.ring(rim, p.x, p.z, p.r * 1.3, 8, { turn: 0.15 });
   plants(ctx, c.inner);
 }
 LAYOUTS.village.pond = ctx => pondLayout(ctx, (cx, r) => { cx.ring('bench', ctx.c.pond.x, ctx.c.pond.z, ctx.c.pond.r * 1.5, 2, { facing: true, s: ctx.Sc }); villageGrass(cx, r); cx.scatter(['sheep', 'chicken'], 1, r); });
@@ -575,13 +720,14 @@ LAYOUTS.village.meadow = ctx => { const r = ctx.c.inner; ctx.scatter(['bench', '
 // A plot is dense woodland, mixed woods, a clearing (a cabin with a campfire, logs round it, a woodpile, deer), rocky
 // ground, a pond, or (far out) a grove of giant trees. Plants grow at the foot of the trees: ferns and mushrooms ring
 // them, stumps and logs lie near, squirrels sit by them. Trails keep clear of trees.
-function treeFeet(ctx, trees, per) {                              // plants and little animals round the trees just placed
+const FEET = [['fern', 0.4], ['mushroom', 0.75], ['stump', 0.88], ['log', 0.95], ['squirrel', 1]];   // what grows at the foot of a tree: cumulative shares
+function treeFeet(ctx, trees, per, feet = FEET) {                 // plants and little animals round the trees just placed
   const rnd = ctx.rnd;
   for (const t of trees) {
     const n = Math.floor(per * rnd() + 0.5);
     for (let k = 0; k < n; k++) {
-      const a = rnd() * 6.283, rr = t.r * (1.05 + 0.5 * rnd()), q = rnd();
-      ctx.add(q < 0.4 ? 'fern' : q < 0.75 ? 'mushroom' : q < 0.88 ? 'stump' : q < 0.95 ? 'log' : 'squirrel', t.x + Math.cos(a) * rr, t.z + Math.sin(a) * rr);
+      const a = rnd() * 6.283, rr = t.r * (1.05 + 0.5 * rnd()), q = rnd(), id = (feet.find(f => q < f[1]) || feet[feet.length - 1])[0];
+      ctx.add(id, t.x + Math.cos(a) * rr, t.z + Math.sin(a) * rr);
     }
   }
 }
@@ -612,6 +758,204 @@ LAYOUTS.forest.clearing = ctx => {
 };
 LAYOUTS.forest.pond = ctx => pondLayout(ctx, (cx, r) => { cx.scatter('oak', 1.5, r); cx.scatter('pine', 3.5, r); cx.scatter(['fern', 'mushroom', 'rock', 'log', 'stump'], 9, r); cx.scatter(['deer', 'rabbit', 'squirrel'], 1.6, r); cx.scatter('bush', 3, r); });
 
+// ------------------------------------------------------------------ Jurassic Park
+// Jungle with ferns, eggs and small dinosaurs; paddocks behind electric fences with a gate and a herd of one species
+// (a tour jeep inside, a watchtower in the corner); nesting grounds; the visitor centre with its gift shop, gate and
+// jeeps in rows; a lagoon with swamp trees; and a compound with a laboratory, helipad, generators and cages.
+const trees = (ctx, since, ids) => ctx.objs.slice(since).filter(o => ids.includes(TYPES[o.ty].id));
+const DINOS = ['gallimimus', 'raptor', 'ankylosaurus', 'triceratops', 'stegosaurus', 'trex', 'brachio'];
+const JFEET = [['giantfern', 0.35], ['fern', 0.6], ['egg0', 0.7], ['egg1', 0.78], ['egg2', 0.85], ['compy', 0.95], ['fossil', 1]];
+const EGGS = ['egg0', 'egg1', 'egg2'], JEEPS = ['jeep0', 'jeep1', 'jeep2'];
+const centreOf = r => [(r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2];
+const gateAt = (F, pr) => { const horiz = F.sd === 'n' || F.sd === 's', mid = horiz ? (pr.x0 + pr.x1) / 2 : (pr.z0 + pr.z1) / 2; return { mid, horiz, at: F.sd === 'n' ? [mid, pr.z0] : F.sd === 's' ? [mid, pr.z1] : F.sd === 'w' ? [pr.x0, mid] : [pr.x1, mid] }; };
+LAYOUTS.jurassic.jungle = ctx => {
+  const r = ctx.c.inner, before = ctx.objs.length;
+  ctx.scatter('jungletree', 0.7, r); ctx.scatter('tropicpalm', 3, r); ctx.scatter('cycad', 4, r);
+  treeFeet(ctx, trees(ctx, before, ['jungletree', 'tropicpalm', 'cycad']), 2.2, JFEET);
+  ctx.scatter(['raptor', 'gallimimus', 'fossil'], 1.6, r); ctx.scatter(['giantfern', 'fern'], 18, r); ctx.scatter(EGGS, 5, r); ctx.scatter('compy', 5, r);
+};
+LAYOUTS.jurassic.paddock = ctx => {
+  const c = ctx.c, F = ctx.frame(ctx.front()), pr = shrink(c.inner, 0.05 * c.C), sp = ctx.pick(DINOS, ctx.rnd), G = gateAt(F, pr), S = ctx.Sc;
+  ctx.fence(pr, { side: F.sd, at: G.mid, w: 5.6 * S }, 'efence');
+  ctx.add('gate', G.at[0], G.at[1], { s: S * 0.9, yaw: G.horiz ? 0 : Math.PI / 2 });
+  const g = shrink(pr, 0.8 * S), jp = F.at(0.5, 0.12);
+  if (sp) ctx.herd(sp, g, ctx.herdSize(sp, g), { pen: pr });
+  ctx.add(ctx.pick(JEEPS, ctx.rnd), jp[0], jp[1], { s: S, yaw: F.yaw });
+  ctx.add('watchtower', pr.x1 - 2.5 * S, pr.z0 + 2.5 * S, { s: S });
+  ctx.scatter(['tropicpalm', 'cycad', 'giantfern', 'fern'], 8, g); ctx.scatter(['compy', 'egg0', 'egg1', 'fossil'], 4, g, { pen: pr });
+  ctx.scatter(['tropicpalm', 'giantfern', 'fern'], 6, c.inner);
+};
+LAYOUTS.jurassic.nest = ctx => {
+  const c = ctx.c, r = c.inner, [mx, mz] = centreOf(r), rad = Math.min(r.x1 - r.x0, r.z1 - r.z0) * 0.22, S = ctx.Sc;
+  ctx.add('nest', mx, mz, { s: S * 1.3 });
+  const mum = ctx.pick(['triceratops', 'stegosaurus', 'ankylosaurus', 'gallimimus'], ctx.rnd); if (mum) ctx.add(mum, mx + rad * 1.7, mz, {});
+  ctx.ring('nest', mx, mz, rad, 7, { s: S }); ctx.ring(EGGS, mx, mz, rad * 0.55, 8, { s: S });
+  ctx.scatter('cycad', 2, r); ctx.scatter('tropicpalm', 1.2, r); ctx.scatter('compy', 5, r); ctx.scatter(['giantfern', 'fern'], 8, r); ctx.scatter([...EGGS, 'fossil'], 3, r);
+};
+LAYOUTS.jurassic.visitor = ctx => {
+  const c = ctx.c, F = ctx.frame(ctx.front()), r = c.inner, S = ctx.Sc, rnd = ctx.rnd;
+  const vp = F.at(0.5, 0.62); ctx.add('visitorcentre', vp[0], vp[1], { s: S, yaw: F.yaw });
+  const sp = F.at(0.13, 0.5); ctx.add('giftshop', sp[0], sp[1], { s: S, yaw: F.yaw });
+  const gp = F.at(0.5, 0.03); ctx.add('gate', gp[0], gp[1], { s: S * 0.9, yaw: F.sd === 'n' || F.sd === 's' ? 0 : Math.PI / 2 });
+  for (let k = 0; k < 7; k++) { const jp = F.at(0.12 + k * 0.12, 0.2); ctx.add(ctx.pick(JEEPS, rnd), jp[0], jp[1], { s: S, yaw: F.yaw + Math.PI / 2 }); }
+  ctx.scatter(['citybench', 'bin', 'lamp'], 4, r); ctx.scatter(['tropicpalm', 'cycad', 'giantfern', 'fern'], 11, r); ctx.scatter(FLOWERS, 10, r); ctx.scatter(['compy', 'egg0', 'egg1', 'camptent0'], 3, r);
+};
+LAYOUTS.jurassic.lagoon = ctx => pondLayout(ctx, (cx, r) => {
+  const p = cx.c.pond, box = { x0: p.x - p.r, x1: p.x + p.r, z0: p.z - p.r, z1: p.z + p.r }, wader = cx.pick(['brachio', 'triceratops', 'gallimimus'], cx.rnd);
+  if (wader) cx.herd(wader, shrink(box, p.r * 0.3), 1 + (cx.rnd() < 0.5 ? 1 : 0), { pen: box, water: true });
+  cx.scatter('swamptree', 2, r); cx.scatter(['tropicpalm', 'cycad'], 3.5, r); cx.scatter(['giantfern', 'fern'], 14, r); cx.scatter(['nest', 'fossil', ...EGGS], 6, r); cx.scatter(['gallimimus', 'raptor', 'compy'], 2, r);
+}, { edge: 'reed', life: 'compy', lifePer: 4, rim: ['swamptree', 'cycad', 'giantfern'] });
+LAYOUTS.jurassic.compound = ctx => {
+  const c = ctx.c, F = ctx.frame(ctx.front()), pr = shrink(c.inner, 0.05 * c.C), S = ctx.Sc, G = gateAt(F, pr), r = c.inner;
+  ctx.fence(pr, { side: F.sd, at: G.mid, w: 5.6 * S }, 'efence');
+  ctx.add('gate', G.at[0], G.at[1], { s: S * 0.9, yaw: G.horiz ? 0 : Math.PI / 2 });
+  const lp = F.at(0.4, 0.55); ctx.add('lab', lp[0], lp[1], { s: S, yaw: F.yaw });
+  const hp = F.at(0.8, 0.3); ctx.add('helipad', hp[0], hp[1], { s: S });
+  ctx.add('watchtower', pr.x0 + 2.5 * S, pr.z1 - 2.5 * S, { s: S });
+  const g = shrink(pr, 0.8 * S);
+  ctx.scatter(['generator', 'cage', 'jeep0', 'jeep1', 'jeep2'], 3, g); ctx.scatter(['camptent0', 'camptent1'], 1, g); ctx.scatter(['crate', 'barrel', 'bin', 'lamp'], 4, g);
+  ctx.scatter(['tropicpalm', 'cycad', 'giantfern', 'fern'], 6, r); ctx.scatter(['compy', 'raptor'], 0.8, r);
+};
+
+// ------------------------------------------------------------------ the desert
+// Dunes with cacti, rocks and little creatures; an oasis with palms, tents and camels; a town of adobe houses facing
+// the track round a market with a well; ruins (rows of columns, obelisks, a sphinx, and far out a pyramid); a canyon of
+// mesas and arches; a nomad camp round a fire.
+const DFEET = [['cactus', 0.3], ['agave', 0.55], ['scorpion', 0.7], ['lizard', 0.85], ['skull', 1]];
+const TENTS = ['tentd0', 'tentd1', 'tentd2'], STALLS = ['stall0', 'stall1', 'stall2'], ADOBE = ['adobe0', 'adobe1', 'adobe2', 'adobetower0', 'adobetower1'];
+LAYOUTS.desert.dunes = ctx => {
+  const r = ctx.c.inner;
+  ctx.scatter('saguaro', 1.8, r); ctx.scatter('sandrock', 2.6, r); ctx.scatter('cactus', 5, r); ctx.scatter('agave', 6, r);
+  ctx.scatter(['tumbleweed', 'lizard', 'scorpion', 'meerkat'], 6, r); ctx.scatter(['skull', 'pot'], 1.5, r); ctx.scatter('camel', 0.35, r);
+};
+LAYOUTS.desert.oasis = ctx => pondLayout(ctx, (cx, r) => {
+  cx.scatter('datepalm', 5, r); cx.scatter(TENTS, 1.4, r); cx.scatter('camel', 2, r); cx.scatter(['meerkat', 'lizard', 'scorpion'], 6, r); cx.scatter(['agave', 'cactus'], 8, r); cx.scatter(['pot', 'stall0', 'stall1', 'crate'], 3, r); cx.scatter('bush', 3, r);
+}, { edge: 'reed', life: 'duck', rim: ['datepalm', 'datepalm', 'sandrock'] });
+LAYOUTS.desert.town = ctx => {
+  const c = ctx.c, r = c.inner, TS = ctx.TS;
+  const dN = frontage(ctx, 'n', ADOBE, r.x0, r.x1), dS = frontage(ctx, 's', ADOBE, r.x0, r.x1);
+  const dW = frontage(ctx, 'w', ADOBE, r.z0 + dN, r.z1 - dS), dE = frontage(ctx, 'e', ADOBE, r.z0 + dN, r.z1 - dS);
+  const yard = { x0: r.x0 + dW + 0.4 * TS, x1: r.x1 - dE - 0.4 * TS, z0: r.z0 + dN + 0.4 * TS, z1: r.z1 - dS - 0.4 * TS };
+  if (yard.x1 - yard.x0 > 3 * TS && yard.z1 - yard.z0 > 3 * TS) {
+    const [mx, mz] = centreOf(yard), rad = Math.min(yard.x1 - yard.x0, yard.z1 - yard.z0) * 0.32;
+    ctx.add('desertwell', mx, mz, { s: ctx.Sc }); ctx.ring(STALLS, mx, mz, rad, 6, { facing: true, s: ctx.Sc });
+    ctx.scatter('camel', 2.5, yard); ctx.scatter(['pot', 'crate', 'barrel'], 14, yard); ctx.scatter(['meerkat', 'lizard', 'cat', 'scorpion'], 8, yard); ctx.scatter(['datepalm', 'cactus', 'agave'], 6, yard); ctx.scatter(STALLS, 1.5, yard);
+  }
+  if (ctx.d >= 120 && ctx.rnd() < 0.4) { const F = ctx.frame(ctx.front()), mp = F.at(0.5, 0.5); ctx.add('mosque', mp[0], mp[1], { s: ctx.Sc, yaw: F.yaw }); }
+  ctx.scatter(['pot', 'crate', 'cactus', 'agave'], 6, r); ctx.scatter(['lizard', 'scorpion', 'meerkat', 'tumbleweed'], 6, r); ctx.scatter(['datepalm', 'camel', 'skull'], 1.5, r);
+};
+LAYOUTS.desert.ruins = ctx => {
+  const c = ctx.c, F = ctx.frame(ctx.front()), r = c.inner, S = ctx.Sc;
+  if (ctx.d >= 840) { const pp = F.at(0.5, 0.55); ctx.add('pyramid', pp[0], pp[1], { s: S, yaw: F.yaw }); }
+  else if (ctx.d >= 200) { const sp = F.at(0.5, 0.7); ctx.add('sphinx', sp[0], sp[1], { s: S, yaw: F.yaw }); }
+  for (const u of [0.15, 0.85]) { const op = F.at(u, 0.2); ctx.add('obelisk', op[0], op[1], { s: S }); }
+  for (let row = 0; row < 2; row++) for (let k = 0; k < 6; k++) { const cp = F.at(0.1 + k * 0.16, 0.05 + row * 0.5); ctx.add(ctx.rnd() < 0.7 ? 'column' : 'brokencolumn', cp[0], cp[1], { s: S, yaw: 0 }); }
+  ctx.scatter('sandrock', 2, r); ctx.scatter(['brokencolumn', 'skull', 'pot'], 4, r); ctx.scatter(['scorpion', 'lizard', 'meerkat'], 5, r); ctx.scatter(['cactus', 'agave'], 3, r);
+};
+LAYOUTS.desert.canyon = ctx => {
+  const r = ctx.c.inner;
+  ctx.scatter('mesa', 0.18, r); ctx.scatter('archrock', 0.3, r); ctx.scatter('sandrock', 6, r); ctx.scatter('saguaro', 1, r); ctx.scatter(['cactus', 'agave'], 5, r);
+  ctx.scatter(['lizard', 'scorpion', 'meerkat', 'tumbleweed'], 5, r); ctx.scatter(['skull', 'camel'], 0.8, r);
+};
+LAYOUTS.desert.camp = ctx => {
+  const c = ctx.c, r = c.inner, [mx, mz] = centreOf(r), rad = Math.min(r.x1 - r.x0, r.z1 - r.z0) * 0.2, S = ctx.Sc;
+  ctx.add('campfire', mx, mz, { s: S * 1.2 }); ctx.ring(TENTS, mx, mz, rad, 6, { facing: true, s: S }); ctx.ring('camel', mx, mz, rad * 1.7, 5, { turn: 0.4 });
+  ctx.scatter('datepalm', 1.5, r); ctx.scatter(['pot', 'crate', 'barrel'], 5, r); ctx.scatter(['meerkat', 'lizard', 'scorpion'], 4, r); ctx.scatter(['cactus', 'agave', 'sandrock'], 3, r); ctx.scatter(['skull', 'desertwell'], 0.6, r);
+};
+
+// ------------------------------------------------------------------ the arctic
+// Snowfields with drifts, rocks, snowmen and wildlife; snowy pine woods; frozen lakes with penguins, seals and fishing
+// huts; a research outpost; a village of igloos round a fire; and glaciers of ice spires with bears.
+const AFEET = [['snowdrift', 0.35], ['hare', 0.6], ['arcticfox', 0.7], ['icecrystal', 0.85], ['snowrock', 1]], WILD = ['hare', 'arcticfox', 'wolf', 'reindeer'];
+LAYOUTS.arctic.snowfield = ctx => {
+  const r = ctx.c.inner;
+  ctx.scatter('polarbear', 0.15, r); ctx.scatter('deadtree', 1.4, r); ctx.scatter('snowrock', 3, r); ctx.scatter('snowdrift', 8, r); ctx.scatter('snowman', 1.2, r);
+  ctx.scatter('icecrystal', 4, r); ctx.scatter(WILD, 4, r); ctx.scatter(['snowpine', 'seal'], 0.8, r);
+};
+LAYOUTS.arctic.pinewood = ctx => {
+  const r = ctx.c.inner, before = ctx.objs.length;
+  ctx.scatter('snowpine', 12, r); ctx.scatter('deadtree', 1.5, r);
+  treeFeet(ctx, trees(ctx, before, ['snowpine']), 2.6, AFEET);
+  ctx.scatter(['snowdrift', 'snowrock'], 12, r); ctx.scatter(WILD, 6, r); ctx.scatter(['icecrystal', 'snowman'], 4, r); ctx.scatter(['sled', 'campfire'], 0.4, r);
+};
+LAYOUTS.arctic.frozenlake = ctx => pondLayout(ctx, (cx, r) => {
+  cx.scatter('fishinghut', 0.7, r); cx.scatter('snowmobile0', 0.4, r); cx.scatter('snowpine', 3, r); cx.scatter(['snowdrift', 'snowrock'], 5, r); cx.scatter(['hare', 'arcticfox'], 2, r); cx.scatter(['polarbear', 'wolf'], 0.3, r); cx.scatter('icecrystal', 3, r);
+}, { edge: 'icecrystal', life: ['penguin', 'penguin', 'seal'], lifePer: 4, rim: ['snowrock', 'snowrock', 'snowpine'] });
+LAYOUTS.arctic.outpost = ctx => {
+  const c = ctx.c, F = ctx.frame(ctx.front()), pr = shrink(c.inner, 0.05 * c.C), S = ctx.Sc, G = gateAt(F, pr), r = c.inner;
+  ctx.fence(pr, { side: F.sd, at: G.mid, w: 4 * S });
+  const sp = F.at(0.45, 0.55); ctx.add('station', sp[0], sp[1], { s: S, yaw: F.yaw });
+  const mp = F.at(0.85, 0.7); ctx.add('antenna', mp[0], mp[1], { s: S });
+  const g = shrink(pr, 0.8 * S);
+  ctx.scatter(['snowmobile0', 'snowmobile1', 'snowmobile2'], 2.4, g); ctx.scatter(['barrel', 'crate', 'sled'], 4, g); ctx.scatter(['antenna', 'snowcabin'], 0.6, g); ctx.scatter(['snowdrift', 'snowrock'], 4, g); ctx.scatter('snowman', 1, g);
+  ctx.scatter(['snowpine', 'deadtree'], 2, r); ctx.scatter(WILD, 1.5, r);
+};
+LAYOUTS.arctic.iglooville = ctx => {
+  const c = ctx.c, r = c.inner, [mx, mz] = centreOf(r), rad = Math.min(r.x1 - r.x0, r.z1 - r.z0) * 0.24, S = ctx.Sc;
+  ctx.add('campfire', mx, mz, { s: S * 1.2 }); ctx.ring('igloo', mx, mz, rad, 5, { facing: true, s: S }); ctx.ring('snowcabin', mx, mz, rad * 1.75, 3, { turn: 0.6, facing: true });
+  ctx.ring('sled', mx, mz, rad * 0.5, 4, { s: S }); ctx.scatter(['wolf', 'arcticfox', 'reindeer'], 5, r); ctx.scatter(['snowman', 'snowdrift', 'snowrock'], 10, r); ctx.scatter(['barrel', 'crate', 'fishinghut', 'sled'], 5, r); ctx.scatter(['snowpine', 'deadtree'], 4, r); ctx.scatter(['hare', 'penguin', 'seal'], 5, r); ctx.scatter(['icecrystal', 'snowmobile0'], 4, r);
+};
+LAYOUTS.arctic.glacier = ctx => {
+  const r = ctx.c.inner;
+  ctx.scatter('icespire', 0.6, r); ctx.scatter('iceberg', 1, r); ctx.scatter('icecrystal', 10, r); ctx.scatter('snowdrift', 9, r); ctx.scatter('snowrock', 7, r);
+  ctx.scatter('polarbear', 0.6, r); ctx.scatter(['seal', 'penguin', 'arcticfox', 'hare'], 7, r); ctx.scatter(['snowman', 'deadtree'], 1.5, r);
+};
+
+// ------------------------------------------------------------------ the volcano
+// Ash plains with lava rocks, vents and newts; lava flows (a river of lava with salamanders on its banks); a crater
+// with a lava lake; mines with huts, carts and a shaft; a forge with ruined towers; and fields of obsidian spires.
+LAYOUTS.volcano.ashfield = ctx => {
+  const r = ctx.c.inner;
+  ctx.scatter('lavagolem', 0.15, r); ctx.scatter('charredtree', 1.6, r); ctx.scatter('lavarock', 6, r); ctx.scatter('ashpile', 8, r); ctx.scatter('obsidian', 4, r);
+  ctx.scatter('vent', 2, r); ctx.scatter('geyser', 0.8, r); ctx.scatter(['magmanewt', 'salamander', 'ember'], 6, r); ctx.scatter('skull', 0.5, r);
+};
+LAYOUTS.volcano.lavaflow = ctx => {
+  const c = ctx.c, r = c.inner, rv = c.river, band = rv.horiz ? { x0: r.x0, x1: r.x1, z0: rv.at - rv.w / 2, z1: rv.at + rv.w / 2 } : { x0: rv.at - rv.w / 2, x1: rv.at + rv.w / 2, z0: r.z0, z1: r.z1 };
+  ctx.scatter(['salamander', 'ember', 'magmanewt'], 3, band, { water: true });
+  ctx.scatter('obsidianspire', 0.6, r); ctx.scatter('lavarock', 8, r); ctx.scatter('obsidian', 4, r); ctx.scatter('ashpile', 5, r); ctx.scatter('vent', 1.5, r);
+  ctx.scatter(['charredtree', 'lavagolem'], 0.8, r); ctx.scatter(['magmanewt', 'salamander'], 3, r);
+};
+LAYOUTS.volcano.crater = ctx => pondLayout(ctx, (cx, r) => {
+  cx.scatter('lavagolem', 0.3, r); cx.scatter(['vent', 'geyser'], 2.5, r); cx.scatter(['lavarock', 'ashpile', 'obsidian'], 6, r); cx.scatter(['magmanewt', 'salamander', 'ember'], 4, r); cx.scatter('charredtree', 1, r);
+}, { edge: 'obsidian', life: ['ember', 'salamander'], lifePer: 5, rim: ['obsidianspire', 'lavarock', 'geyser'] });
+LAYOUTS.volcano.mine = ctx => {
+  const c = ctx.c, F = ctx.frame(ctx.front()), r = c.inner, S = ctx.Sc;
+  const sp = F.at(0.5, 0.7); ctx.add('mineshaft', sp[0], sp[1], { s: S, yaw: F.yaw });
+  for (const u of [0.15, 0.85]) { const hp = F.at(u, 0.3); ctx.add('minehut', hp[0], hp[1], { s: S, yaw: F.yaw }); }
+  ctx.scatter(['minecart', 'anvil', 'crate', 'barrel'], 5, r); ctx.scatter(['lavarock', 'ashpile', 'obsidian'], 6, r); ctx.scatter(['lamp', 'vent'], 1.5, r); ctx.scatter(['salamander', 'magmanewt', 'ember'], 4, r); ctx.scatter('charredtree', 0.8, r);
+};
+LAYOUTS.volcano.forge = ctx => {
+  const c = ctx.c, F = ctx.frame(ctx.front()), r = c.inner, S = ctx.Sc;
+  const fp = F.at(0.4, 0.55); ctx.add('forge', fp[0], fp[1], { s: S, yaw: F.yaw });
+  const tp = F.at(0.82, 0.6); ctx.add('smokestack', tp[0], tp[1], { s: S });
+  for (const u of [0.1, 0.9]) { const rp = F.at(u, 0.8); ctx.add('ruintower', rp[0], rp[1], { s: S, yaw: F.yaw }); }
+  ctx.scatter(['anvil', 'crate', 'barrel', 'minecart'], 5, r); ctx.scatter('lavagolem', 0.5, r); ctx.scatter(['lavarock', 'ashpile', 'obsidian'], 5, r); ctx.scatter(['vent', 'smokestack'], 1.5, r); ctx.scatter(['ember', 'salamander', 'magmanewt'], 4, r);
+};
+LAYOUTS.volcano.spires = ctx => {
+  const r = ctx.c.inner;
+  if (ctx.d >= 840) { const [mx, mz] = centreOf(r); ctx.add('volcanocone', mx, mz, { s: ctx.Sc }); }
+  ctx.scatter('obsidianspire', 3, r); ctx.scatter('ruintower', 0.25, r); ctx.scatter(['obsidian', 'vent'], 6, r); ctx.scatter(['ember', 'magmanewt', 'salamander'], 6, r); ctx.scatter(['ashpile', 'lavarock'], 5, r); ctx.scatter('charredtree', 1, r);
+};
+
+// ------------------------------------------------------------------ rival holes (bots)
+// Some cells have a bot living in them, decided by the seed alone, so the same bots are in the same places each time and
+// (later) for two players online. A bot is as big as the place suits: its radius is the starting radius times the local
+// scale times a factor, so wherever a hole of about the right size goes, it meets bots about its own size. Two small,
+// harmless bots live in the cells round the start. The game moves and feeds them while their cell is loaded.
+const BOT_NAMES = ['Gulp', 'Maw', 'Voidy', 'Pit', 'Abyss', 'Chomp', 'Sinkhole', 'Burrow', 'Crater', 'Swallow', 'Hoover', 'Gobble', 'Munch', 'Nibbles', 'Hungry Hal', 'Dredge', 'Plug', 'Drain', 'Vortex', 'Gape', 'Yawn', 'Sump', 'Cavern', 'Hollow', 'Gorge', 'Pothole', 'Manhole', 'Big Well', 'Shaft', 'Dimple', 'Nom', 'Slurp', 'Gnash', 'Devour', 'Glutton', 'Scoop', 'Digby', 'Moley', 'Tunnel', 'Ditch', 'Void Vic', 'Black Betty', 'Mouthy', 'Gaping Gail', 'Sinker', 'Bottomless', 'Chasm', 'Gully'];
+const BOT_COLOURS = ['#ff6f8f', '#6cb8ff', '#7dffb0', '#c08aff', '#ff9a4a', '#4de0e0', '#f2f26a', '#ffffff'];
+const BOT_CHANCE = 0.2;                                           // the share of cells with a bot
+const START_BOTS = { '0:0': [0.8, 14, 12], '-1:-1': [0.6, -17, -15] };   // factor, x, z
+function botSpec(c) {
+  const rnd = rng(hash(SEED, c.t, c.i, c.j, 555)), fixed = c.t === 0 ? START_BOTS[c.i + ':' + c.j] : undefined;
+  const roll = rnd(), px = rnd(), pz = rnd(), pm = rnd(), pn = rnd(), pc = rnd(), pa = rnd();
+  if (!fixed && roll >= BOT_CHANCE) return null;
+  const x = fixed ? fixed[1] : c.inner.x0 + px * (c.inner.x1 - c.inner.x0), z = fixed ? fixed[2] : c.inner.z0 + pz * (c.inner.z1 - c.inner.z0), d = Math.hypot(x, z);
+  if (tierOf(d) !== c.t || (!fixed && d < 40) || (c.pond && Math.hypot(x - c.pond.x, z - c.pond.z) < c.pond.r * 1.2)) return null;
+  const m = fixed ? fixed[0] : d < 150 ? 0.5 + 0.7 * pm : 0.5 * Math.pow(5.2, pm);   // near the start no bot is much bigger than a new hole
+  return { id: c.key, x, z, r: R0 * scaleAt(d) * m, name: BOT_NAMES[Math.floor(pn * BOT_NAMES.length)], colour: BOT_COLOURS[Math.floor(pc * BOT_COLOURS.length)], aggr: 0.4 + 0.6 * pa };
+}
+
 // ------------------------------------------------------------------ making a cell
 // A cell is made from the seed alone, so it is the same each time it is made. cull: leave out things smaller than
 // this radius (they would be specks next to the hole); the rest are exactly as they would be without it.
@@ -621,7 +965,7 @@ function genCell(t, i, j, cull = 0) {
   const objs = ctx.objs.filter(o => !o.ghost);
   let maxR = 0;
   for (const o of objs) if (o.r > maxR) maxR = o.r;
-  return { t, i, j, x0: c.x0, z0: c.z0, C: c.C, objs, maxR, key: c.key, biome: c.biome, kind: c.kind };
+  return { t, i, j, x0: c.x0, z0: c.z0, C: c.C, objs, maxR, key: c.key, biome: c.biome, kind: c.kind, bot: botSpec(c) };
 }
 
 // ------------------------------------------------------------------ the cells wanted round a point
@@ -663,7 +1007,7 @@ function fmtLen(m) {                                              // a length fo
 return {
   D0, R0, MAXLV, REACH, CURVE, C0, EAT_MAX, SPAWN_CLEAR, MAXXP, CUM,
   scaleAt, tierOf, tierRange, cellSize, setSeed, getSeed, hash, rng,
-  need, progress, radiusAt, xpFor, canEat, swallowDist,
+  need, progress, radiusAt, xpFor, xpForRadius, canEat, swallowDist, BOT_NAMES, BOT_COLOURS, botSpec,
   BIOMES, STYLES, FACE, LANE, yawOf, biomeAt, cellInfo, cellAt, groundColour, polar, LAYOUTS,
   TYPES, BIGGEST, BYID, byId, model, genCell, wantedCells, fmtLen,
 };

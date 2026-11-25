@@ -86,10 +86,10 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
   await p.screenshot({ path: shot('falling.png') });
   await frames(p, 40);
   const after = await p.evaluate(() => ({ falling: __rh.FALL.length, standing: __rh.standing(), xp: __rh.H.xp, r: __rh.H.rt, eaten: __rh.H.eaten, slots: __rh.poolSlots() }));
-  ok(after.falling === 0 && await p.evaluate(() => window.__thing.state === 2), 'the thing is gone once it has fallen');
+  ok(await p.evaluate(() => window.__thing.state === 2), 'the thing is gone once it has fallen');
   ok(after.xp > before.xp && after.r >= before.r, 'eating gives xp and the hole grows');
   ok((await p.textContent('#lvEaten')).includes('Eaten ' + after.eaten), 'the HUD counts what has been eaten');
-  ok(after.slots === after.standing, 'every standing thing has exactly one drawn copy (' + after.slots + ')');
+  ok(after.slots === after.standing + after.falling, 'every standing or falling thing has exactly one drawn copy (' + after.slots + ')');
 
   // a thing bigger than the hole is not swallowed
   const big = await p.evaluate(() => {
