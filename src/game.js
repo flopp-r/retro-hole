@@ -255,17 +255,34 @@ function unmount(c) {
   for (const o of c.objs) if (o.state < 2) { if (o.state === 1) dropFall(o); FADING.delete(o); o.fd = 0; o.fading = false; POOLS[o.ty].release(o.slot); o.state = 2; }
   objTotal -= c.objs.length; CELLS.delete(c.key);
 }
+// How far the nearest edge of a cell is from the hole: the same measure wantedCells() sorts by.
+const cellDist = c => Math.hypot(H.x - Math.min(Math.max(H.x, c.x0), c.x0 + c.C), H.z - Math.min(Math.max(H.z, c.z0), c.z0 + c.C));
+// Every quarter of a second: the cells within 32 hole radii are wanted, and a cell stays until it is beyond 1.3 times
+// that. Everything wanted is always kept (the keep list is the wanted list plus a margin), so a cell can never be made
+// and dropped again at the next look, which would regrow the things eaten there.
 function plan() {
   const R = 32 * H.rt, cull = 0.05 * H.rt;
   const want = W.wantedCells(H.x, H.z, R, cull), keep = new Set(W.wantedCells(H.x, H.z, R * 1.3, cull).map(c => c.t + ':' + c.i + ':' + c.j));
+  for (const c of want) keep.add(c.t + ':' + c.i + ':' + c.j);
   for (const c of [...CELLS.values()]) if (!keep.has(c.key)) unmount(c);
   queue = want.filter(c => !CELLS.has(c.t + ':' + c.i + ':' + c.j));
 }
+// Makes the wanted cells nearest first. When the budget of things is spent, a nearer cell takes the place of the
+// farthest cell held, and only if that one is farther (so the held cells settle on the nearest ones and nothing is
+// made and dropped in turn).
 function makeCells(maxMs) {
   const t0 = performance.now(); let n = 0;
-  while (queue.length && objTotal < OBJ_BUDGET && (n === 0 || performance.now() - t0 < maxMs)) {
-    const w = queue.shift(), key = w.t + ':' + w.i + ':' + w.j;
-    if (CELLS.has(key)) continue;
+  while (queue.length && (n === 0 || performance.now() - t0 < maxMs)) {
+    const w = queue[0], key = w.t + ':' + w.i + ':' + w.j;
+    if (CELLS.has(key)) { queue.shift(); continue; }
+    if (objTotal >= OBJ_BUDGET) {
+      let far = null, fd = -1;
+      for (const c of CELLS.values()) { const d = cellDist(c); if (d > fd) { fd = d; far = c; } }
+      if (!far || fd <= w.dist) break;
+      unmount(far);
+      continue;
+    }
+    queue.shift();
     mount(W.genCell(w.t, w.i, w.j, 0.05 * H.rt)); n++;
   }
 }

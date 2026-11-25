@@ -168,7 +168,7 @@ const rng = seed => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>
 // 10, 1.3% by level 100, half a per cent at the cap), so the first minutes show a hole visibly getting bigger. The xp a
 // thing gives is its size next to the hole's, squared, plus a small flat part, so small things still count at the start
 // and a thing nearly your size is worth a lot.
-const need = L => 0.14 * Math.pow(1 + L / 25, 1.1);               // xp to get from level L to L + 1
+const need = L => 0.27 * Math.pow(1 + L / 25, 1.1);               // xp to get from level L to L + 1
 const CUM = new Float64Array(MAXLV + 2);                          // CUM[L] = xp at which level L begins
 for (let L = 1; L <= MAXLV; L++) CUM[L + 1] = CUM[L] + need(L);
 const MAXXP = CUM[MAXLV];
@@ -332,15 +332,26 @@ function polar(x, z) {                                            // where a poi
   const d = Math.hypot(x, z), S = scaleAt(d);
   return { d, S, u: (Math.atan2(z, x) / (2 * Math.PI) + 0.5) * SECTORS, v: Math.log(S) * RINGS };
 }
-// Areas are patches on a map of rings and sectors, so a patch is as much bigger as it is far out and the pattern
-// looks the same at every size. A cell takes the area at its middle. The start (within 70 m) is always a village.
+// Areas are regions on a map of rings and sectors, so a region is as much bigger as it is far out and the pattern looks
+// the same at every size. The map has a jittered grid of region centres (REGION.K to a turn, a ring row every factor of
+// e^(1/REGION.R) in distance plus REGION.FLOOR), each centre has one area, and a point belongs to the nearest centre.
+// That gives every region a guaranteed minimum size, about 300 m across even next to the start (the floor distance
+// stops the regions near the start shrinking to nothing). A cell takes the area at its middle. The centres in the
+// first ring row are all villages, so the start is one big village.
+const REGION = { K: 5, R: 1.06, FLOOR: 150, JITTER: 0.4 };
 function rawBiome(x, z) {
-  const p = polar(x, z);
-  if (p.d < 70) return 'village';
-  const city = 0.65 * vnoise(p.u, p.v, SECTORS, SEED + 1) + 0.35 * vnoise(p.u * 2, p.v * 2, SECTORS * 2, SEED + 2);
-  if (city > 0.6) return 'city';
-  const forest = 0.65 * vnoise(p.u, p.v, SECTORS, SEED + 3) + 0.35 * vnoise(p.u * 2, p.v * 2, SECTORS * 2, SEED + 4);
-  return forest > 0.5 ? 'forest' : 'village';
+  const d = Math.hypot(x, z), K = REGION.K, u = (Math.atan2(z, x) / (2 * Math.PI) + 0.5) * K, v = Math.log((d + REGION.FLOOR) / REGION.FLOOR) * REGION.R;
+  const iu = Math.floor(u), iv = Math.floor(v);
+  let best = Infinity, bk = 0, bj = 0;
+  for (let a = iu - 1; a <= iu + 1; a++) for (let b = Math.max(0, iv - 1); b <= iv + 1; b++) {
+    const ka = ((a % K) + K) % K;
+    const su = a + 0.5 + (hash(SEED, ka, b, 31) / TWO32 - 0.5) * REGION.JITTER, sv = b + 0.5 + (hash(SEED, ka, b, 32) / TWO32 - 0.5) * REGION.JITTER;
+    const dd = (u - su) * (u - su) + (v - sv) * (v - sv);
+    if (dd < best) { best = dd; bk = ka; bj = b; }
+  }
+  if (bj === 0) return 'village';                                 // every centre in the first ring row is a village, so the start is one big village with natural edges
+  const h = hash(SEED, bk, bj, 33) / TWO32;
+  return h < 0.28 ? 'city' : h < 0.62 ? 'forest' : 'village';
 }
 // the road on one cell edge: its style, or null. axis 0: the line x = k * C, between cells (k - 1, m) and (k, m);
 // axis 1: the line z = k * C, between (m, k - 1) and (m, k). A line is a road along its whole length when its hash is
@@ -423,7 +434,7 @@ function groundColour(x, z, tx, tz) {                             // the colour 
 
 // ------------------------------------------------------------------ the tools every layout uses
 const LAYOUTS = { city: {}, village: {}, forest: {} };
-const DENSITY = 1.8;                                              // how thickly everything is scattered (the counts in the layouts are multiplied by this)
+const DENSITY = 3.2;                                              // how thickly everything is scattered (the counts in the layouts are multiplied by this)
 const yawOf = (dx, dz) => Math.atan2(-dx, -dz);                   // models face -z, so this turns a model to face (dx, dz)
 const FACE = { w: [-1, 0], e: [1, 0], n: [0, -1], s: [0, 1] };    // from a plot towards the road on that side
 const INWARD = { w: [1, 0], e: [-1, 0], n: [0, 1], s: [0, -1] };
@@ -520,19 +531,26 @@ function cityStreets(ctx) {
   for (const sd of ['w', 'e', 'n', 's']) {
     if (c.road[sd] !== 'street') continue;
     const g = pavementSide(ctx, sd), mid = g.wd / 2 + g.pv * 0.5, yaw = yawOf(...g.face);
-    for (let a = g.a0 + 2 * TS; a < g.a1 - TS; a += 5.5 * TS * (0.85 + 0.3 * rnd())) { const p = g.at(a, mid); ctx.add('lamp', p[0], p[1], { yaw, s: ctx.Sc, out: true }); }
-    for (let a = g.a0 + 3.5 * TS; a < g.a1 - TS; a += 3.6 * TS) {
-      if (rnd() > 0.55) continue;
+    for (let a = g.a0 + 1.5 * TS; a < g.a1 - TS; a += 4.2 * TS * (0.85 + 0.3 * rnd())) { const p = g.at(a, mid); ctx.add('lamp', p[0], p[1], { yaw, s: ctx.Sc, out: true }); }
+    for (let a = g.a0 + 2.5 * TS; a < g.a1 - TS; a += 2.6 * TS) {
+      if (rnd() > 0.8) continue;
       const id = ctx.pick(['streettree', 'streettree', 'streettree', 'bin', 'bin', 'hydrant', 'citybench', 'citybench', 'phonebox', 'busstop'], rnd), p = g.at(a + (rnd() - 0.5) * TS, mid);
       if (id) ctx.add(id, p[0], p[1], { yaw: id === 'streettree' ? undefined : yaw, out: true });
     }
     // traffic in the lane on this side
-    const lane = g.at(0, g.wd / 4), len = g.a1 - g.a0, lanes = Math.max(0, Math.round(len / (9 * TS) * (0.5 + rnd() * 0.7)));
+    const lane = g.at(0, g.wd / 4), len = g.a1 - g.a0, lanes = Math.max(0, Math.round(len / (6 * TS) * (0.6 + rnd() * 0.7)));
     for (let k = 0; k < lanes; k++) {
       const a = g.a0 + (k + 0.15 + 0.7 * rnd()) / Math.max(lanes, 1) * len, p = g.at(a, g.wd / 4), q = rnd();
       ctx.add(ctx.pick(q < 0.7 ? ['car0', 'car1', 'car2', 'car3', 'car4'] : q < 0.85 ? ['van'] : ['bus'], rnd) || 'car0', p[0], p[1], { yaw: yawOf(...g.lane), maxW: g.wd / 2 * 0.8, out: true });
     }
     void lane;
+    // parked cars along the kerb, facing the way the lane goes
+    const cm = model(BYID.car0), plen = 2 * cm.hd * ctx.Sc * 1.2;
+    for (let a = g.a0 + plen; a < g.a1 - plen; a += plen * (1 + 0.5 * rnd())) {
+      if (rnd() > 0.6) continue;
+      const p = g.at(a, g.wd / 2 - cm.hw * ctx.Sc * 1.05);
+      ctx.add(ctx.pick(['car0', 'car1', 'car2', 'car3', 'car4'], rnd) || 'car0', p[0], p[1], { yaw: yawOf(...g.lane), s: ctx.Sc, out: true });
+    }
   }
   // a traffic light at each corner where two streets cross
   for (const [a, b, xs, zs] of [['w', 'n', 1, 1], ['e', 'n', -1, 1], ['w', 's', 1, -1], ['e', 's', -1, -1]]) {
@@ -569,15 +587,15 @@ LAYOUTS.city.built = ctx => {
   const dW = frontage(ctx, 'w', list, r.z0 + dN, r.z1 - dS), dE = frontage(ctx, 'e', list, r.z0 + dN, r.z1 - dS);
   const yard = { x0: r.x0 + dW + 0.4 * ctx.TS, x1: r.x1 - dE - 0.4 * ctx.TS, z0: r.z0 + dN + 0.4 * ctx.TS, z1: r.z1 - dS - 0.4 * ctx.TS };
   if (yard.x1 - yard.x0 > 2 * ctx.TS && yard.z1 - yard.z0 > 2 * ctx.TS) {   // the courtyard: trees, benches, bins, pigeons
-    ctx.scatter('streettree', 4, yard); ctx.scatter('citybench', 1.2, yard); ctx.scatter('bin', 2, yard); ctx.scatter('pigeon', 3, yard); ctx.scatter('hydrant', 0.6, yard);
+    ctx.scatter('streettree', 8, yard); ctx.scatter('citybench', 2.4, yard); ctx.scatter('bin', 4, yard); ctx.scatter('pigeon', 7, yard); ctx.scatter('hydrant', 1.2, yard); ctx.scatter(['cone', 'phonebox'], 1.5, yard); ctx.scatter(FLOWERS, 4, yard);
   }
 };
 LAYOUTS.city.park = ctx => {
   const c = ctx.c, r = shrink(c.inner, 0.3 * ctx.TS), mx = (r.x0 + r.x1) / 2, mz = (r.z0 + r.z1) / 2;
   cityStreets(ctx);
   if (ctx.rnd() < 0.6) ctx.add('fountain', mx, mz, { s: ctx.Sc * 1.1 });
-  ctx.scatter('parktree', 3.2, r); ctx.scatter('streettree', 2, r); ctx.scatter('citybench', 1.2, r); ctx.scatter('lamp', 0.8, r);
-  ctx.scatter(FLOWERS, 7, r); ctx.scatter('pigeon', 3, r); ctx.scatter('rabbit', 0.5, r);
+  ctx.scatter('parktree', 6, r); ctx.scatter('streettree', 4, r); ctx.scatter('citybench', 2.4, r); ctx.scatter('lamp', 1.6, r);
+  ctx.scatter(FLOWERS, 14, r); ctx.scatter(['pigeon', 'duck'], 6, r); ctx.scatter('rabbit', 1.5, r); ctx.scatter(['bin', 'hydrant'], 1.5, r);
 };
 LAYOUTS.city.plaza = ctx => {
   const c = ctx.c, r = shrink(c.inner, 0.3 * ctx.TS), mx = (r.x0 + r.x1) / 2, mz = (r.z0 + r.z1) / 2, rad = Math.min(r.x1 - r.x0, r.z1 - r.z0) * 0.32;
@@ -585,7 +603,7 @@ LAYOUTS.city.plaza = ctx => {
   ctx.add('fountain', mx, mz, { s: ctx.Sc * 1.3 });
   ctx.ring('citybench', mx, mz, rad, 8, { facing: true, s: ctx.Sc });
   ctx.ring('lamp', mx, mz, rad * 1.5, 4, { turn: Math.PI / 4, s: ctx.Sc });
-  ctx.scatter('streettree', 1.2, r); ctx.scatter('pigeon', 7, r); ctx.scatter('bin', 1, r);
+  ctx.scatter('streettree', 3, r); ctx.scatter('pigeon', 14, r); ctx.scatter(['bin', 'cone', 'hydrant'], 2, r); ctx.scatter(FLOWERS, 3, r);
 };
 LAYOUTS.city.lot = ctx => {                                       // a car park: rows of cars either side of an aisle
   const c = ctx.c, r = shrink(c.inner, 0.3 * ctx.TS), m = model(BYID.car0), s = ctx.Sc, len = 2 * m.hd * s * 1.12, wid = 2 * m.hw * s * 1.25;
@@ -595,7 +613,7 @@ LAYOUTS.city.lot = ctx => {                                       // a car park:
     if (a % 3 === 2) continue;                                    // an aisle after every two rows
     for (let b = 0; b < cols; b++) if (ctx.rnd() < 0.65) ctx.add(ctx.pick(['car0', 'car1', 'car2', 'car3', 'car4']), r.x0 + (b + 0.5) * len, r.z0 + (a + 0.5) * wid, { yaw: a % 3 === 0 ? Math.PI / 2 : -Math.PI / 2, s });
   }
-  ctx.scatter('cone', 1.5, r); ctx.scatter('bin', 0.5, r);
+  ctx.scatter('cone', 3, r); ctx.scatter(['bin', 'lamp', 'hydrant', 'pigeon'], 2, r);
 };
 
 // ------------------------------------------------------------------ the village
@@ -654,8 +672,8 @@ LAYOUTS.village.pasture = ctx => {
 LAYOUTS.village.field = ctx => {
   const c = ctx.c, r = c.inner, rnd = ctx.rnd;
   ctx.add('scarecrow', (r.x0 + r.x1) / 2 + (rnd() - 0.5) * 0.3 * c.C, (r.z0 + r.z1) / 2 + (rnd() - 0.5) * 0.3 * c.C, { s: ctx.Sc * 1.1 });
-  ctx.scatter('tractor', 0.25, r); ctx.scatter('haystack', 0.5, r); ctx.scatter('haybale', 2.5, r); ctx.scatter(['crate', 'barrel'], 0.8, r);
-  ctx.scatter('rabbit', 2.5, r); ctx.scatter('duck', 0.6, r); ctx.scatter(FLOWERS, 5, r);
+  ctx.scatter('tractor', 0.4, r); ctx.scatter('haystack', 1, r); ctx.scatter('haybale', 5, r); ctx.scatter(['crate', 'barrel', 'bucket'], 2, r);
+  ctx.scatter(['rabbit', 'duck', 'chicken'], 4, r); ctx.scatter(FLOWERS, 10, r); ctx.scatter(['hedge', 'fence'], 1.5, r);
 };
 LAYOUTS.village.orchard = ctx => {
   const c = ctx.c, r = shrink(c.inner, 0.06 * c.C), m = model(BYID.appletree), s = ctx.Sc * 1.0, pitch = 2 * m.hw * s * 1.45;
@@ -699,13 +717,13 @@ function woods(ctx, pine, oak, extra) {
   const r = ctx.c.inner, before = ctx.objs.length;
   if (extra) for (const id of extra) ctx.scatter(id[0], id[1], r);
   ctx.scatter('oak', oak, r); ctx.scatter('pine', pine, r);
-  treeFeet(ctx, ctx.objs.slice(before).filter(o => { const id = TYPES[o.ty].id; return id === 'pine' || id === 'oak' || id === 'giantoak' || id === 'redwood'; }), 1.1);
-  ctx.scatter('bush', 3, r); ctx.scatter(['rock', 'log', 'stump'], 2, r); ctx.scatter(['fern', 'mushroom'], 5, r); ctx.scatter(['deer', 'fox'], 0.4, r); ctx.scatter('rabbit', 0.8, r);
+  treeFeet(ctx, ctx.objs.slice(before).filter(o => { const id = TYPES[o.ty].id; return id === 'pine' || id === 'oak' || id === 'giantoak' || id === 'redwood'; }), 2.4);
+  ctx.scatter('bush', 5, r); ctx.scatter(['rock', 'log', 'stump'], 4, r); ctx.scatter(['fern', 'mushroom'], 12, r); ctx.scatter(['deer', 'fox'], 0.7, r); ctx.scatter(['rabbit', 'squirrel'], 2, r);
 }
 LAYOUTS.forest.dense = ctx => woods(ctx, 10, 4, [['giantoak', 0.25]]);
 LAYOUTS.forest.mixed = ctx => woods(ctx, 4, 2.5, [['giantoak', 0.15], ['boulder', 0.3]]);
 LAYOUTS.forest.grove = ctx => woods(ctx, 2.5, 1.5, [['redwood', 0.8], ['giantoak', 0.8]]);
-LAYOUTS.forest.rocky = ctx => { const r = ctx.c.inner; ctx.scatter('boulder', 1.6, r); ctx.scatter('pine', 2.5, r); ctx.scatter('rock', 5, r); ctx.scatter(['fern', 'mushroom', 'stump', 'log'], 4, r); ctx.scatter(['deer', 'fox'], 0.3, r); };
+LAYOUTS.forest.rocky = ctx => { const r = ctx.c.inner; ctx.scatter('boulder', 2.4, r); ctx.scatter('pine', 4, r); ctx.scatter('rock', 11, r); ctx.scatter(['fern', 'mushroom', 'stump', 'log'], 9, r); ctx.scatter(['deer', 'fox', 'squirrel'], 0.8, r); };
 LAYOUTS.forest.clearing = ctx => {
   const c = ctx.c, r = c.inner, F = ctx.frame(ctx.front()), mx = (r.x0 + r.x1) / 2, mz = (r.z0 + r.z1) / 2, rnd = ctx.rnd;
   const cp = F.at(0.5, 0.7), cabin = ctx.add('cabin', cp[0], cp[1], { s: ctx.Sc, yaw: F.yaw });
@@ -716,11 +734,11 @@ LAYOUTS.forest.clearing = ctx => {
   const rim = []; for (const q of [{ x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z0 + 0.18 * c.C }, { x0: r.x0, x1: r.x1, z0: r.z1 - 0.18 * c.C, z1: r.z1 }, { x0: r.x0, x1: r.x0 + 0.18 * c.C, z0: r.z0, z1: r.z1 }, { x0: r.x1 - 0.18 * c.C, x1: r.x1, z0: r.z0, z1: r.z1 }]) rim.push(q);
   const before = ctx.objs.length;
   for (const q of rim) { ctx.scatter('oak', 4, q); ctx.scatter('pine', 8, q); }
-  treeFeet(ctx, ctx.objs.slice(before).filter(o => { const id = TYPES[o.ty].id; return id === 'pine' || id === 'oak'; }), 1);
-  ctx.scatter(['deer', 'fox', 'rabbit'], 1.2, r); ctx.scatter(['fern', 'mushroom', 'stump', 'rock'], 4, r); ctx.scatter('bush', 1.5, r);
+  treeFeet(ctx, ctx.objs.slice(before).filter(o => { const id = TYPES[o.ty].id; return id === 'pine' || id === 'oak'; }), 2);
+  ctx.scatter(['deer', 'fox', 'rabbit', 'squirrel'], 2.4, r); ctx.scatter(['fern', 'mushroom', 'stump', 'rock'], 9, r); ctx.scatter('bush', 3, r);
   void mx; void mz; void rnd;
 };
-LAYOUTS.forest.pond = ctx => pondLayout(ctx, (cx, r) => { cx.scatter('oak', 1.5, r); cx.scatter('pine', 3.5, r); cx.scatter(['fern', 'mushroom', 'rock', 'log', 'stump'], 4, r); cx.scatter(['deer', 'rabbit'], 0.8, r); });
+LAYOUTS.forest.pond = ctx => pondLayout(ctx, (cx, r) => { cx.scatter('oak', 1.5, r); cx.scatter('pine', 3.5, r); cx.scatter(['fern', 'mushroom', 'rock', 'log', 'stump'], 9, r); cx.scatter(['deer', 'rabbit', 'squirrel'], 1.6, r); cx.scatter('bush', 3, r); });
 
 // ------------------------------------------------------------------ making a cell
 // A cell is made from the seed alone, so it is the same each time it is made. cull: leave out things smaller than
@@ -788,7 +806,7 @@ const W = WORLD;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
-const BUILD = '1f1d2d45';   // version: tools/build.js fills in a fingerprint of the game code
+const BUILD = '8a01eefa';   // version: tools/build.js fills in a fingerprint of the game code
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ------------------------------------------------------------------ settings
@@ -1037,17 +1055,34 @@ function unmount(c) {
   for (const o of c.objs) if (o.state < 2) { if (o.state === 1) dropFall(o); FADING.delete(o); o.fd = 0; o.fading = false; POOLS[o.ty].release(o.slot); o.state = 2; }
   objTotal -= c.objs.length; CELLS.delete(c.key);
 }
+// How far the nearest edge of a cell is from the hole: the same measure wantedCells() sorts by.
+const cellDist = c => Math.hypot(H.x - Math.min(Math.max(H.x, c.x0), c.x0 + c.C), H.z - Math.min(Math.max(H.z, c.z0), c.z0 + c.C));
+// Every quarter of a second: the cells within 32 hole radii are wanted, and a cell stays until it is beyond 1.3 times
+// that. Everything wanted is always kept (the keep list is the wanted list plus a margin), so a cell can never be made
+// and dropped again at the next look, which would regrow the things eaten there.
 function plan() {
   const R = 32 * H.rt, cull = 0.05 * H.rt;
   const want = W.wantedCells(H.x, H.z, R, cull), keep = new Set(W.wantedCells(H.x, H.z, R * 1.3, cull).map(c => c.t + ':' + c.i + ':' + c.j));
+  for (const c of want) keep.add(c.t + ':' + c.i + ':' + c.j);
   for (const c of [...CELLS.values()]) if (!keep.has(c.key)) unmount(c);
   queue = want.filter(c => !CELLS.has(c.t + ':' + c.i + ':' + c.j));
 }
+// Makes the wanted cells nearest first. When the budget of things is spent, a nearer cell takes the place of the
+// farthest cell held, and only if that one is farther (so the held cells settle on the nearest ones and nothing is
+// made and dropped in turn).
 function makeCells(maxMs) {
   const t0 = performance.now(); let n = 0;
-  while (queue.length && objTotal < OBJ_BUDGET && (n === 0 || performance.now() - t0 < maxMs)) {
-    const w = queue.shift(), key = w.t + ':' + w.i + ':' + w.j;
-    if (CELLS.has(key)) continue;
+  while (queue.length && (n === 0 || performance.now() - t0 < maxMs)) {
+    const w = queue[0], key = w.t + ':' + w.i + ':' + w.j;
+    if (CELLS.has(key)) { queue.shift(); continue; }
+    if (objTotal >= OBJ_BUDGET) {
+      let far = null, fd = -1;
+      for (const c of CELLS.values()) { const d = cellDist(c); if (d > fd) { fd = d; far = c; } }
+      if (!far || fd <= w.dist) break;
+      unmount(far);
+      continue;
+    }
+    queue.shift();
     mount(W.genCell(w.t, w.i, w.j, 0.05 * H.rt)); n++;
   }
 }

@@ -44,6 +44,21 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
   const said = await p.evaluate(() => new Promise(res => { const t0 = performance.now(); const f = () => { const h = document.querySelector('#hint'); if (/Return to Start/.test(h.textContent)) res(true); else if (performance.now() - t0 > 14000) res(false); else setTimeout(f, 200); }; f(); }));
   ok(said, 'with nothing small enough nearby for a while, a hint points to Return to Start');
 
+  // a big hole in a place where everything is small (a city 700 m out, seen by a level 400 hole) must not make and drop
+  // cells over and over: that regrew what was eaten there, and the place seemed to refresh itself
+  const city = await p.evaluate(() => { const W = __rh.W; for (let t = 1; t < 4; t++) for (let i = -30; i < 30; i++) for (let j = -30; j < 30; j++) { const c = W.cellInfo(t, i, j), [a, b] = W.tierRange(t); const cs = [[c.x0, c.z0], [c.x1, c.z0], [c.x0, c.z1], [c.x1, c.z1]].map(q => Math.hypot(...q)); if (Math.min(...cs) >= a && Math.max(...cs) < b && c.biome === 'city' && c.kind === 'built') return { x: c.cx, z: c.cz }; } return null; });
+  ok(!!city, 'there is a city to test in');
+  await p.evaluate(c => { __rh.setXp(__rh.W.CUM[400]); __rh.teleport(c.x, c.z); }, city); await frames(p, 40);
+  const churn = await p.evaluate(() => new Promise(res => {
+    let prev = new Set(__rh.CELLS.keys()), made = 0, dropped = 0, objsMax = 0; const e0 = __rh.H.eaten, t0 = performance.now();
+    const tick = () => { const cur = new Set(__rh.CELLS.keys()); for (const k of cur) if (!prev.has(k)) made++; for (const k of prev) if (!cur.has(k)) dropped++; prev = cur; objsMax = Math.max(objsMax, __rh.objects);
+      if (performance.now() - t0 > 3000) res({ made, dropped, eaten: __rh.H.eaten - e0, cells: cur.size, objsMax }); else setTimeout(tick, 40); };
+    tick();
+  }));
+  ok(churn.cells > 100 && churn.objsMax <= 14500, 'a level 400 hole in a small-scale city holds many cells within the budget (' + churn.cells + ' cells, ' + churn.objsMax + ' things)');
+  ok(churn.made === 0 && churn.dropped === 0, 'and, standing still, makes and drops none (' + churn.made + ' made, ' + churn.dropped + ' dropped)');
+  ok(churn.eaten === 0, 'so nothing it eats grows back at once');
+
   // a long walk keeps the books straight: every few seconds of movement, nothing leaks
   await p.evaluate(() => { __rh.teleport(0, 0); __rh.setXp(__rh.W.CUM[60]); });
   for (let k = 0; k < 8; k++) {
