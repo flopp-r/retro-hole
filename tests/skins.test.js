@@ -44,5 +44,16 @@ ok(K.cost() === 44500, 'the whole collection costs 44,500 coins (' + K.cost() + 
   ok(JSON.stringify(K.validate(JSON.parse(JSON.stringify(f)))) === JSON.stringify(f), 'and loads back exactly');
   ok(!K.buy(f, 'skin', 'void') && f.coins === 100000, 'nothing is left to buy'); }
 
+// -- the timed modes: score, pay and the best results
+ok(K.TIME_SECS === 180 && K.ARENA_SECS === 240, 'Time Attack lasts 3 minutes and the Arena 4');
+ok(K.timeScore({ level: 31, frac: 0.42, kills: 2 }) === 3642 && K.timeScore({ level: 1, frac: 0, kills: 0 }) === 100, 'a Time Attack score is 100 a level, the share of the next level, and 250 a kill');
+ok(K.timePay(3642) === 91 && K.timePay(39) === 0 && K.timePay(1e9) === 300 && K.timePay(-5) === 0, 'Time Attack pays a coin for each 40 points, to 300 at most');
+ok(K.arenaPay(1, 0) === 120 && K.arenaPay(2, 0) === 80 && K.arenaPay(3, 0) === 50 && K.arenaPay(4, 0) === 20 && K.arenaPay(12, 0) === 20, 'the Arena pays 120, 80, 50 and 20 coins by place');
+ok(K.arenaPay(1, 3) === 150 && K.arenaPay(1, 8) === 200 && K.arenaPay(1, 99) === 200 && K.arenaPay(12, 99) === 100 && K.arenaPay(2, -4) === 80, 'plus 10 a kill (at most 8 count), and never more than 200 coins');
+ok(K.STAT_KEYS.join() === 'normal,quick,time,arena,area' && K.fresh().best.arenaWins === 0 && K.fresh().stats.arena.kills === 0, 'kills and deaths are kept for each kind of game, and a new profile has no best results');
+{ const v = K.validate({ best: { time: 5000.9, arenaWins: -3, arenaPlayed: 'x', arenaBest: 2, bogus: 9 }, stats: { arena: { kills: 7, deaths: 2 }, area: { kills: 1 } } });
+  ok(v.best.time === 5000 && v.best.arenaWins === 0 && v.best.arenaPlayed === 0 && v.best.arenaBest === 2 && v.best.bogus === undefined && v.stats.arena.kills === 7 && v.stats.area.kills === 1, 'best results and the new stats are cleaned when loaded');
+  ok(JSON.stringify(K.validate(JSON.parse(JSON.stringify(v)))) === JSON.stringify(v), 'and load back exactly'); }
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

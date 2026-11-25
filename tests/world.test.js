@@ -307,5 +307,26 @@ ok(W.getMode() === 'normal' && W.MAXLV === 1000 && W.scaleAt(120) === 2 && W.cel
     ok(total > 500 && total < 1500 && totalN > 90000, 'all 1,000 levels pay about ' + Math.round(total) + ' coins in Quick Game (16 minutes) and ' + totalN + ' in the normal game (about 20 hours)'); } }
 W.setMode('normal');
 
+// -- Single Area mode: the whole map is one area
+{ const AREAS = Object.keys(W.BIOMES);
+  for (const a of AREAS) {
+    W.setArea(a);
+    let wrong = 0; for (let k = 0; k < 400; k++) { const d = 20 + k * 25, th = k * 2.399; if (W.biomeAt(d * Math.cos(th), d * Math.sin(th)) !== a) wrong++; }
+    ok(W.getArea() === a && wrong === 0, a + ': every point of the map is ' + a + ' (' + wrong + ' wrong in 400)');
+    const start = [[0, 0], [-1, 0], [0, -1], [-1, -1]].map(([i, j]) => W.genCell(0, i, j, 0)), objs = start.flatMap(c => c.objs);
+    const edible = objs.filter(o => W.canEat(o.r, W.R0)).length, nextUp = objs.filter(o => !W.canEat(o.r, W.R0) && W.canEat(o.r, W.radiusAt(12, 0))).length;
+    ok(edible > 400 && nextUp >= 10 && objs.every(o => o.r < 6), a + ': round the start there is plenty to eat (' + edible + '), things just out of reach (' + nextUp + ') and nothing enormous');
+    let roadStart = 0; for (let t = 0; t < 3; t++) for (let i = -6; i < 6; i++) for (let j = -6; j < 6; j++) { const c = W.cellInfo(t, i, j); for (const [sd, mx, mz] of [['w', c.x0, c.cz], ['e', c.x1, c.cz], ['n', c.cx, c.z0], ['s', c.cx, c.z1]]) if (c.road[sd] && Math.hypot(mx, mz) < 45) roadStart++; }
+    ok(roadStart === 0, a + ': still no road through the start');
+    const g1 = JSON.stringify(W.genCell(1, 3, 2, 0).objs.map(o => [o.ty, o.x, o.z])), g2 = JSON.stringify(W.genCell(1, 3, 2, 0).objs.map(o => [o.ty, o.x, o.z]));
+    ok(g1 === g2, a + ': a cell is the same each time');
+  }
+  W.setArea('forest'); const kinds = [[0, 0], [-1, 0]].map(([i, j]) => W.cellInfo(0, i, j).kind).join(); W.setArea('village');
+  ok(kinds === 'clearing,mixed' && [[0, 0], [-1, 0], [0, -1], [-1, -1]].map(([i, j]) => W.cellInfo(0, i, j).kind).join() === 'pasture,homestead,green,homestead', 'a forest game starts in forest plots, and a village game in the normal start plots');
+  W.setArea('nonsense'); ok(W.getArea() === null, 'an unknown area means no single area');
+  W.setArea(null);
+  const mix = {}; for (let k = 0; k < 1500; k++) { const d = 300 + k * 7, th = k * 2.399; mix[W.biomeAt(d * Math.cos(th), d * Math.sin(th))] = 1; }
+  ok(Object.keys(mix).length === AREAS.length && W.getArea() === null, 'clearing it gives the mixed map back, with all seven areas'); }
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
