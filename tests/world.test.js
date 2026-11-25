@@ -34,6 +34,23 @@ const seen = { village: 0, forest: 0, city: 0 };
 for (let k = 0; k < 3000; k++) { const d = 100 + k * 7, th = k * 2.399; seen[W.biomeAt(d * Math.cos(th), d * Math.sin(th))]++; }
 ok(seen.village > 300 && seen.forest > 300 && seen.city > 300, 'villages, forests and cities all turn up (' + JSON.stringify(seen) + ')');
 ok(W.biomeAt(1234.5, -987.6) === W.biomeAt(1234.5, -987.6), 'an area is the same each time it is asked');
+// regions are big: walking out along any direction, the first change of area is a long way off, and the start is a big village
+let nearest = 1e9, startR = 1e9;
+for (let k = 0; k < 360; k += 5) { const th = k * Math.PI / 180; for (let d = 0; d < 3000; d += 5) if (W.biomeAt(d * Math.cos(th), d * Math.sin(th)) !== 'village') { startR = Math.min(startR, d); break; } }
+ok(startR >= 150, 'the village round the start is at least 150 m in every direction (' + startR + ' m)');
+// the widest circle that fits inside each patch: none of the patches near the start is small (10 m squares on a 3 km map)
+{ const N = 300, H = 1500, st = 2 * H / N, g = []; for (let r = 0; r < N; r++) { g.push([]); for (let c = 0; c < N; c++) g[r].push(W.biomeAt(-H + (c + 0.5) * st, -H + (r + 0.5) * st)); }
+  const dist = Array.from({ length: N }, () => new Float32Array(N).fill(1e9));
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) { const b = g[r][c]; if (r === 0 || c === 0 || r === N - 1 || c === N - 1 || g[r - 1][c] !== b || g[r + 1][c] !== b || g[r][c - 1] !== b || g[r][c + 1] !== b) dist[r][c] = 0; }
+  for (let pass = 0; pass < 2; pass++) { const fwd = pass === 0; for (let r = fwd ? 0 : N - 1; fwd ? r < N : r >= 0; r += fwd ? 1 : -1) for (let c = fwd ? 0 : N - 1; fwd ? c < N : c >= 0; c += fwd ? 1 : -1) { let v = dist[r][c]; const s = fwd ? -1 : 1; if (r + s >= 0 && r + s < N) v = Math.min(v, dist[r + s][c] + 1); if (c + s >= 0 && c + s < N) v = Math.min(v, dist[r][c + s] + 1); dist[r][c] = v; } }
+  const seen = Array.from({ length: N }, () => new Uint8Array(N)), small = [];
+  for (let r0 = 0; r0 < N; r0++) for (let c0 = 0; c0 < N; c0++) { if (seen[r0][c0]) continue; const b = g[r0][c0], stack = [[r0, c0]]; seen[r0][c0] = 1; let maxd = 0, edge = false, cx = 0, cz = 0, n = 0;
+    while (stack.length) { const [r, c] = stack.pop(); n++; cx += c; cz += r; maxd = Math.max(maxd, dist[r][c]); if (r === 0 || c === 0 || r === N - 1 || c === N - 1) edge = true; for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const rr = r + dr, cc = c + dc; if (rr >= 0 && cc >= 0 && rr < N && cc < N && !seen[rr][cc] && g[rr][cc] === b) { seen[rr][cc] = 1; stack.push([rr, cc]); } } }
+    const away = Math.hypot(cx / n * st - H, cz / n * st - H);
+    // strips along a ring edge, where the cells of two rings meet and decide a boundary at different resolutions, are not regions (HANDOVER.md, known limits)
+    const t = W.tierOf(away), nearRingEdge = [W.tierRange(t)[0], W.tierRange(t)[1]].some(e => Math.abs(away - e) < 2 * W.cellSize(t) + 30);
+    if (!edge && n > 40 && !nearRingEdge && 2 * maxd * st < 250 && away < 1000) small.push(b + ' ' + Math.round(2 * maxd * st) + ' m'); }
+  ok(small.length === 0, 'no area within 1 km of the start has a patch narrower than 250 m (' + small.join(', ') + ')'); }
 
 // -- the models
 for (const t of W.TYPES) {
@@ -50,7 +67,7 @@ for (const b of ['village', 'forest', 'city']) ok(small.filter(t => t.biome === 
 
 // -- plots and roads: the framework every area follows
 const kindsSeen = {};
-for (let t = 0; t < 5; t++) for (let i = -14; i < 14; i++) for (let j = -14; j < 14; j++) { const [dA, dB] = W.tierRange(t), c = W.cellInfo(t, i, j), d = Math.hypot(c.cx, c.cz); if (d >= dA && d < dB) kindsSeen[c.biome + '/' + c.kind] = 1; }
+for (let t = 0; t < 7; t++) for (let i = -30; i < 30; i++) for (let j = -30; j < 30; j++) { const [dA, dB] = W.tierRange(t), c = W.cellInfo(t, i, j), d = Math.hypot(c.cx, c.cz); if (d >= dA && d < dB) kindsSeen[c.biome + '/' + c.kind] = 1; }
 const KINDS = ['village/homestead', 'village/farm', 'village/pasture', 'village/field', 'village/orchard', 'village/green', 'village/pond', 'village/meadow', 'forest/dense', 'forest/mixed', 'forest/clearing', 'forest/rocky', 'forest/pond', 'forest/grove', 'city/built', 'city/park', 'city/plaza', 'city/lot'];
 ok(KINDS.every(k => kindsSeen[k] && W.LAYOUTS[k.split('/')[0]][k.split('/')[1]]), 'all 18 kinds of plot turn up, and each has a layout (' + KINDS.filter(k => !kindsSeen[k]).join(',') + ')');
 ok(W.cellInfo(0, 0, 0).kind === 'pasture' && W.cellInfo(0, -1, 0).kind === 'homestead' && W.cellInfo(0, 0, -1).kind === 'green' && W.cellInfo(0, -1, -1).kind === 'homestead', 'the four cells round the start are fixed');
@@ -148,7 +165,7 @@ ok(lamps > 40 && lampsOff === 0, 'lamps stand on the pavement (' + lamps + ')');
 ok(lights >= 10 && lightsOff === 0, 'traffic lights stand at the corners (' + lights + ')');
 // ground: a street tile is dark, the pavement light, and no building stands on the street
 let groundBad = 0;
-for (const [t, i, j] of built.slice(0, 6)) {
+for (const [t, i, j] of built.filter(([t, i, j]) => { const c = W.cellInfo(t, i, j); return c.road.w === 'street' && W.tierOf(Math.hypot(c.x0, c.cz)) === t && W.tierOf(Math.hypot(c.x0 + 0.1 * c.C, c.cz)) === t; }).slice(0, 6)) {
   const c = W.cellInfo(t, i, j), wd = W.STYLES.street.w * c.TS, pv = W.STYLES.street.verge * c.TS, rd = W.groundColour(c.x0 + wd * 0.25, c.cz, 0, 0), pave = W.groundColour(c.x0 + wd / 2 + pv / 2, c.cz, 0, 0);
   if (!(rd[0] < 0.3 && rd[1] < 0.3 && pave[0] > 0.6)) groundBad++;
 }

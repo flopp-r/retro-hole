@@ -49,20 +49,20 @@ Four choices, each with the trade-offs explained and a recommendation (24 Novemb
 
 | Level | Hole width | Things eaten a second | xp per thing | Minutes per level | Hours so far |
 |---|---|---|---|---|---|
-| 1 | 1.0 m | 0.60 | 0.32 | 0.01 | 0.00 |
-| 10 | 1.7 m | 0.17 | 0.19 | 0.11 | 0.01 |
-| 25 | 2.5 m | 0.21 | 0.19 | 0.13 | 0.05 |
-| 50 | 4.0 m | 0.15 | 0.23 | 0.23 | 0.12 |
-| 100 | 8.4 m | 0.20 | 0.17 | 0.41 | 0.34 |
-| 200 | 25 m | 0.27 | 0.20 | 0.49 | 1.07 |
-| 300 | 62 m | 0.20 | 0.25 | 0.81 | 2.4 |
-| 500 | 275 m | 0.19 | 0.18 | 1.9 | 6.7 |
-| 800 | 1.72 km | 0.29 | 0.20 | 1.8 | 18.7 |
-| 1,000 | 5.0 km | | | | about 29 |
+| 1 | 1.0 m | 0.81 | 0.25 | 0.02 | 0.00 |
+| 10 | 1.7 m | 0.62 | 0.16 | 0.07 | 0.01 |
+| 25 | 2.5 m | 0.56 | 0.14 | 0.12 | 0.04 |
+| 50 | 4.0 m | 0.35 | 0.19 | 0.23 | 0.11 |
+| 100 | 8.4 m | 0.41 | 0.17 | 0.39 | 0.31 |
+| 200 | 25 m | 0.55 | 0.18 | 0.52 | 1.15 |
+| 300 | 62 m | 0.41 | 0.16 | 1.15 | 2.4 |
+| 500 | 275 m | 0.24 | 0.15 | 3.8 | 7.4 |
+| 800 | 1.72 km | 0.64 | 0.16 | 2.1 | 19.8 |
+| 1,000 | 5.0 km | | | | about 32 |
 
-History of the same estimate: first build 42 minutes to level 100 and about 63 hours to the cap; after the first feedback (faster curve, more food) 19 minutes and 24 hours; after the plot framework put the same food in tidier places the estimate went to 37 minutes and 52 hours (less food per area, because streets, verges, gardens and ponds are empty of it), so the density of everything scattered was raised (`DENSITY` 1.8 in `src/world.js`) and the xp a level needs lowered (0.2 to 0.14): now 20 minutes and 29 hours. The numbers that set it are `CURVE`, `need()` and the flat part of `xpFor()`, `DENSITY` and the per-100 counts in the layouts, and `SPEED` in `src/game.js` (also in `tools/sim-pace.js`).
+History of the same estimate: first build 42 minutes to level 100 and about 63 hours to the cap; after the first feedback (faster curve, more food) 19 minutes and 24 hours; after the plot framework 37 minutes and 52 hours, retuned (density 1.8, xp 0.14) to 20 minutes and 29 hours; after the owner asked for many more objects everywhere (density 3.2, more street furniture, parked cars, denser forests and fields) the hole met so much more food that it fell to 10 minutes and 16 hours, so the xp a level needs was raised (0.14 to 0.27) to keep the pace the owner had approved: now 19 minutes and 32 hours. The numbers that set it are `CURVE`, `need()` and the flat part of `xpFor()`, `DENSITY` and the per-100 counts in the layouts, and `SPEED` in `src/game.js` (also in `tools/sim-pace.js`).
 
-**Cost:** a cell takes about 2 ms to make. Views of a village, a farm, a clearing and a pond at levels 9 to 78 were 48 to 81 draw calls and 44,000 to 70,000 triangles (330 to 820 things); a city at level 330 was about 50 draw calls and 56,000. The budget is 14,000 things made at once.
+**Cost:** a cell takes about 0.5 to 1 ms to make. Views of a village, a farm, a clearing and a pond at levels 9 to 36 were 38 to 57 draw calls and 59,000 to 115,000 triangles (790 to 1,720 things) in software rendering; there is no frame rate measured on a real graphics card. Typical objects a cell: villages 130 to 250, forests 115 to 160, city blocks about 90, a car park 120 (in cells of any ring, since sizes scale with the ring). The budget is 14,000 things made at once.
 
 ## 6. Ideas
 
@@ -75,6 +75,8 @@ Boost button (with a cost), power-ups, a minimap or a compass to the start, rare
 - **Ring edges are untidy.** Cells never overlap within a ring, but a cell that straddles the line where one ring ends and the next begins holds things only on its own side of it, so a plot is cut off there, and a big thing in one ring can overlap one in the next. Streets that are side streets in one ring end at the ring edge. The ground tiles are coloured from the plot they are in, so they match.
 - **The dissolve is generous.** A big thing within 2.2 hole radii of the line between the hole and the camera dissolves, so in a dense city a few buildings near the hole can be faded at once. If that feels like too much, the margin is in `fadeStep()`.
 - **Plots are the unit.** An area changes at a cell edge, so the boundary between a village and a forest is a stair of squares.
+- **Regions are big, so variety comes later.** The village round the start is at least 150 m in every direction (typically 250 m), and every other region near it is about 400 m or more across, growing with distance. A new player therefore sees only village for the first level 30 or so, and the first forest or city is a few minutes' walk. The knobs are in `REGION` (`FLOOR`, `K`, `R`, `JITTER`) in `src/world.js`.
+- **Strips at ring edges.** Where one ring ends and the next begins, the cells of the two sizes decide an area boundary at different resolutions, so a thin strip of an area (one or two cells wide) can occur right along a ring edge (120, 360, 840, 1,800 m ...). It is not a small region and the tests leave it out; fixing it needs a different map structure.
 - **Audio was not heard.** `sound.test.js` checks that tones start and nothing errors, not how they sound.
 - **Nothing is saved except position, xp and the count.** Eaten things grow back; settings are separate.
 
@@ -83,3 +85,4 @@ Boost button (with a cost), power-ups, a minimap or a compass to the start, rare
 - **24 November 2026: first build (solo).** The world rules and map (levels to 1,000, villages, forests and cities with 55 voxel things, streets in cities), the isometric pixel-art renderer, the hole with its pit and ring, eating and falling, steering by mouse, keys and touch, the HUD, the menu and settings, saving, sound, and the tests and tools. Online play and bots are not in it.
 - **24 November 2026: the owner's first feedback.** (1) Things beside the hole looked dark: a see-through effect meant for tall buildings was also applied to small things next to the hole, and the outlines were heavy on small things; now only the upper parts (above 1.6 hole radii) of tall things are cut away, and only a quarter of their pixels, the outlines are softer, and the pit's walls are lighter so a falling thing reads. (2) A finer floor: tiles about half the size. (3) Faster growth: a quicker growth curve, a faster hole (6.5 radii a second, was 5.5), more things to eat, and the numbers above. (4) A livelier village: houses (three colours), a cottage, a shed, an apple tree, a horse, a pig, a dog, a cat, ducks, rabbits, a gnome, crates, barrels, fences, hedges, a picnic table and more, with bigger things in sight at the start that come within reach after a few levels; animals now wander. Forests got squirrels and foxes and cities pigeons.
 - **24 November 2026: the second round of feedback.** (1) A framework for every area to follow (plots, roads, layouts), with villages, forests and cities rebuilt on it so everything stands where it belongs: cities have a square street grid with pavements, lamps, street trees, bins, traffic lights, cars in the lanes (driving on the left), rows of buildings facing the street and courtyards behind, parks, plazas and car parks; villages have houses facing lanes in fenced gardens with postboxes, farms with paddocks and yards, pastures, fields, orchards, greens and ponds; forests have woods with plants at the foot of the trees, clearings with a cabin and campfire, rocky ground, ponds and groves, with trees kept off trails. New things: terraces, park and street trees, fountain, traffic light, reeds, campfire, woodpile. (2) Mouse steering can be turned off (M, or Settings). (3) A too-big thing dissolves while the hole is under it or it is in the way of the camera. The food density and xp per level were retuned (see section 5).
+- **25 November 2026: bigger regions and many more objects.** (1) Areas (village, forest, city) are now regions with a guaranteed minimum size: a jittered grid of region centres on the ring-and-sector map, each with one area, replacing the smooth noise whose patches near the start could be a few metres wide (a tenth of the runs along a line from the start were 16 m or less). The village round the start is at least 150 m in every direction; other regions near it are 400 m or more across and grow with distance. Measured with the widest circle that fits inside each patch, over ten seeds. (2) Many more objects everywhere: the density of everything scattered is 3.2 (was 1.8), street lamps are closer together, more street furniture and traffic, parked cars along every kerb, and denser forests (plants at the foot of every tree, more rocks, bushes, ferns, mushrooms and animals), fields, courtyards, parks, plazas and car parks. Villages are now 130 to 250 things a cell, forests 115 to 160, city blocks about 90. (3) The xp a level needs was raised (0.14 to 0.27) to keep the climb at the pace the owner approved (see section 5).
