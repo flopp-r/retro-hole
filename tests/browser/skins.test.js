@@ -138,6 +138,11 @@ const { launch, serve, watch, ok, ready, frames, shot } = require('./lib.js');
   await p.reload(); await ready(p);
   ok(await p.evaluate(() => __rh.profile.coins === 0 && __rh.profile.wear.skin === 'classic' && __rh.profile.wear.fx === 'none'), 'a damaged saved profile is cleaned: no negative coins, nothing worn that is not owned');
 
+  // the Skins screen fits an upright phone too
+  await p.setViewportSize({ width: 360, height: 640 }); await p.click('#bSkins'); await frames(p, 2);
+  for (const tab of ['skin', 'fx', 'stats']) { await p.click(`#skTabs button[data-tab=${tab}]`); await frames(p, 1); ok(await inside('#skins .ovPanel') && await inside('#bSkinsClose'), 'the ' + tab + ' tab fits 360 x 640'); }
+  await p.click('#bSkinsClose'); await p.setViewportSize({ width: 760, height: 340 }); await frames(p, 2);
+
   // the HUD with its extra line still fits phones, upright and sideways, without overlapping the scoreboard
   for (const [w, h] of [[760, 340], [480, 300], [360, 640]]) {
     await p.setViewportSize({ width: w, height: h }); await p.click('#bPlay').catch(() => {}); await frames(p, 4);

@@ -73,6 +73,7 @@ function validate(raw) {                                          // a clean pro
   for (const m of ['normal', 'quick']) { const s = raw.stats && raw.stats[m]; if (s) { p.stats[m].kills = Math.floor(num(s.kills, 1e9)); p.stats[m].deaths = Math.floor(num(s.deaths, 1e9)); } }
   return p;
 }
+const full = () => { const p = fresh(); p.coins = 100000; for (const k of Object.keys(KINDS)) p.owned[k] = KINDS[k].map(x => x.id); return p; };   // admin mode's test profile: everything owned, plenty of coins
 const owns = (p, kind, id) => p.owned[kind].includes(id);
 function buy(p, kind, id) {                                       // spends the coins and puts it on; false (nothing changed) if unknown, owned or too dear
   const it = find(kind, id);
@@ -85,6 +86,6 @@ const earn = (p, n) => { if (n > 0 && isFinite(n)) p.coins = Math.round(Math.min
 const kd = s => s.deaths ? s.kills / s.deaths : s.kills;          // kills for each death (with no deaths, just the kills)
 const total = p => SKINS.length + EFFECTS.length - 2;             // what can be bought (the two free ones excluded)
 const cost = () => [...SKINS, ...EFFECTS].reduce((a, x) => a + x.price, 0);
-return { RARITY, PRICE, SKINS, EFFECTS, KINDS, find, fresh, validate, owns, buy, wear, earn, kd, total, cost };
+return { RARITY, PRICE, SKINS, EFFECTS, KINDS, find, fresh, full, validate, owns, buy, wear, earn, kd, total, cost };
 })();
 if (typeof module !== 'undefined') module.exports = SKINS_MOD;

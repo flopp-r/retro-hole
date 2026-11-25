@@ -38,5 +38,11 @@ ok(K.cost() === 44500, 'the whole collection costs 44,500 coins (' + K.cost() + 
   ok(K.validate(null).coins === 0 && K.validate('x').wear.skin === 'classic' && K.validate(42).owned.fx[0] === 'none', 'anything that is not a profile gives a new one');
   ok(K.validate({ coins: 1e30 }).coins <= 1e12, 'coins are capped'); }
 
+// -- admin mode's test profile
+{ const f = K.full();
+  ok(f.coins === 100000 && f.owned.skin.length === 25 && f.owned.fx.length === 7 && f.wear.skin === 'classic', 'the admin test profile owns everything and has 100,000 coins');
+  ok(JSON.stringify(K.validate(JSON.parse(JSON.stringify(f)))) === JSON.stringify(f), 'and loads back exactly');
+  ok(!K.buy(f, 'skin', 'void') && f.coins === 100000, 'nothing is left to buy'); }
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
