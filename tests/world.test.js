@@ -245,5 +245,43 @@ ok(covers(0, 0, 60) && covers(300, -200, 150) && covers(-1500, 900, 400) && cove
 // -- words
 ok(W.fmtLen(0.5) === '50 cm' && W.fmtLen(1) === '1.0 m' && W.fmtLen(250) === '250 m' && W.fmtLen(2500) === '2.50 km' && W.fmtLen(25000) === '25 km', 'lengths are written in cm, m and km');
 
+// -- quick mode: one fixed scale, no level cap, regions of one size, extremely fast growth
+W.setMode('quick');
+ok(W.getMode() === 'quick' && W.scaleAt(0) === 1 && W.scaleAt(1e6) === 1 && W.tierOf(1e6) === 0 && W.tierRange(0)[1] === Infinity && W.cellSize(0) === 32, 'quick mode has one scale and one cell size however far out');
+ok(W.MAXLV === Infinity && W.MAXXP === Infinity && W.progress(1e9).level > 10000, 'quick mode has no level cap');
+{ let mono = true, back = 0; for (let L = 1; L < 3000; L += 7) { if (!(W.radiusAt(L + 1, 0) > W.radiusAt(L, 0)) || !(W.need(L + 1) >= W.need(L))) mono = false; const p = W.progress(W.cum(L) + 1e-9); if (p.level !== L) back++; }
+  ok(mono && back === 0, 'quick mode levels only go up, and xp gives back the level');
+  let rt = 0; for (const [L, f] of [[1, 0.3], [2, 0.9], [10, 0.5], [100, 0.99], [1000, 0.5], [9000, 0.2]]) { const p = W.progress(W.xpForRadius(W.radiusAt(L, f))); if (p.level !== L || Math.abs(p.frac - f) > 1e-6) rt++; }
+  ok(rt === 0, 'a bot made at a size has exactly that level in quick mode'); }
+ok(near(W.radiusAt(1, 0), 0.5, 1e-12) && W.radiusAt(100, 0) > 6 && W.radiusAt(100, 0) < 8 && W.radiusAt(1000, 0) > 20 && W.radiusAt(1000, 0) < 35, 'the hole reaches the size of the biggest buildings at level 100 (' + W.radiusAt(100, 0).toFixed(1) + ' m) and keeps growing more slowly (' + W.radiusAt(1000, 0).toFixed(0) + ' m at 1,000)');
+ok(W.cum(10) < 1.5 && W.cum(100) < 25 && W.need(1) < 0.2, 'levels need very little xp (' + W.cum(100).toFixed(1) + ' xp to level 100, against ' + (() => { W.setMode('normal'); const v = W.CUM[100].toFixed(0); W.setMode('quick'); return v; })() + ' normally)');
+// the map: areas are regions of one size, the start is a big village, and things are the same size everywhere
+{ const seenQ = {}; for (const k of Object.keys(W.BIOMES)) seenQ[k] = 0; for (let k = 0; k < 8000; k++) { const d = 100 + k * 6, th = k * 2.399; seenQ[W.biomeAt(d * Math.cos(th), d * Math.sin(th))]++; }
+  ok(Object.values(seenQ).every(n => n > 150), 'all seven areas turn up in quick mode (' + JSON.stringify(seenQ) + ')');
+  let startRq = 1e9; for (let k = 0; k < 360; k += 5) { const th = k * Math.PI / 180; for (let d = 0; d < 4000; d += 5) if (W.biomeAt(d * Math.cos(th), d * Math.sin(th)) !== 'village') { startRq = Math.min(startRq, d); break; } }
+  ok(startRq >= 250, 'the village round the start is at least 250 m in every direction (' + startRq + ' m)');
+  // regions are the same size near and far: count area changes along a line 0-1.5 km and 8-9.5 km out
+  const changes = (from) => { let n = 0, last = null; for (let d = from; d < from + 1500; d += 10) { const b = W.biomeAt(d, 0.37 * d); if (last && b !== last) n++; last = b; } return n; };
+  const near = changes(300), far = changes(8000), far2 = changes(20000);
+  ok(near >= 1 && far >= 1 && far2 >= 1 && far <= near * 5 && near <= far * 5 + 5, 'areas change about as often far out as near (' + near + ', ' + far + ', ' + far2 + ' changes in 1.5 km)'); }
+{ let sizeBad = 0, outside = 0, clash = 0, cells = 0, objsN = 0;
+  for (const [i, j] of [[0, 0], [-1, 0], [5, 7], [-40, 30], [200, -150], [900, 600], [-3000, 100]]) { const cell = W.genCell(0, i, j, 0); cells++; objsN += cell.objs.length;
+    for (const o of cell.objs) { if (!(o.s >= 0.5 && o.s <= 1.4)) sizeBad++; if (o.x - o.ex < cell.x0 - 1e-6 || o.x + o.ex > cell.x0 + 32 + 1e-6 || o.z - o.ez < cell.z0 - 1e-6 || o.z + o.ez > cell.z0 + 32 + 1e-6) outside++; }
+    for (let p = 0; p < cell.objs.length; p++) for (let q = p + 1; q < cell.objs.length; q++) { const u = cell.objs[p], v = cell.objs[q]; if (Math.abs(u.x - v.x) < (u.ex + v.ex) * 0.9 - 1e-9 && Math.abs(u.z - v.z) < (u.ez + v.ez) * 0.9 - 1e-9) clash++; } }
+  ok(objsN > 800 && sizeBad === 0, 'things are the same size 100 m or 100 km out (' + objsN + ' things in ' + cells + ' cells)');
+  ok(outside === 0 && clash === 0, 'and stand wholly inside their cell, not overlapping');
+  ok(JSON.stringify(W.genCell(0, 12, -9, 0).objs) === JSON.stringify(W.genCell(0, 12, -9, 0).objs), 'a quick cell is the same each time');
+  const full = W.genCell(0, 40, 25, 0), cut = W.genCell(0, 40, 25, 0.4), keep = full.objs.filter(o => o.r >= 0.4).map(o => o.ty + ':' + o.x.toFixed(5) + ':' + o.z.toFixed(5)).sort().join('|');
+  ok(cut.objs.map(o => o.ty + ':' + o.x.toFixed(5) + ':' + o.z.toFixed(5)).sort().join('|') === keep, 'leaving out small things leaves the rest exactly as it was, in quick mode too'); }
+{ const kindsQ = {}; for (let i = -120; i < 120; i++) for (let j = -120; j < 120; j++) { const c = W.cellInfo(0, i, j); kindsQ[c.biome + '/' + c.kind] = 1; }
+  ok(KINDS.every(k => kindsQ[k]), 'all 42 kinds of plot turn up in quick mode (' + KINDS.filter(k => !kindsQ[k]).join(',') + ')'); }
+// bots in quick mode: small near the start, bigger the further out, to 14 times by 1.5 km
+{ const rs = d => { const out = []; for (let a = 0; a < 3000 && out.length < 40; a++) { const th = a * 2.399, x = d * Math.cos(th), z = d * Math.sin(th), c = W.cellAt(x, z), b = W.genCell(0, c.i, c.j, 0).bot; if (b) out.push(b.r); } return out.sort((p, q) => p - q)[Math.floor(out.length / 2)]; };
+  const nearR = rs(100), farR = rs(2500);
+  ok(nearR < 1.2 && farR > 3 * nearR && W.botScale(5000) === W.QUICK.BOT_X && W.botScale(0) === 1, 'bots get bigger with distance in quick mode (' + nearR.toFixed(2) + ' m at 100 m, ' + farR.toFixed(1) + ' m at 2.5 km)'); }
+{ const w = W.wantedCells(0, 0, 1e6, 0); ok(w.length === 1200 && w.every((c, i) => i === 0 || c.dist >= w[i - 1].dist), 'a hole far too big for the cells wants only the nearest ones (quick mode)'); }
+W.setMode('normal');
+ok(W.getMode() === 'normal' && W.MAXLV === 1000 && W.scaleAt(120) === 2 && W.cellSize(2) === 128, 'switching back to normal mode gives the normal world again');
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
