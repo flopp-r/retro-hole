@@ -55,7 +55,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #titleBox{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
 #brand{margin:0;font-family:'Press Start 2P',monospace;font-weight:400;font-size:clamp(24px,6vw,48px);line-height:1;color:var(--lamp);text-shadow:3px 3px 0 var(--rose),6px 6px 0 var(--ink)}
 #tag{font-size:24px;max-width:30ch}
-#titleBtns{display:flex;flex-direction:column;gap:10px;min-width:260px}
+#titleBtns{display:grid;grid-template-columns:1fr;gap:10px;min-width:260px}
 #how{font-size:20px;opacity:.85;max-width:44ch}
 #ver{position:fixed;left:0;right:0;bottom:6px;text-align:center;font-size:17px;opacity:.55}
 #pause{background:rgba(13,10,28,.55)}
@@ -68,7 +68,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 .seg .btn{font-size:9px;padding:7px 9px}
 .note{font-size:18px;opacity:.75}
 @media (max-width:560px){.row{grid-template-columns:1fr}}
-@media (max-height:420px){#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
+@media (max-height:420px){#titleBtns{grid-template-columns:1fr 1fr;min-width:0}#how{display:none}#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px;max-width:none}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
 </style>
 </head>
 <body>
@@ -82,7 +82,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
   </div>
   <div id="top">
     <button id="bMenu" class="btn" type="button">Menu</button>
-    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span></div>
+    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span><span id="wMode" hidden><br>Quick Mode</span></div>
   </div>
   <div id="board" class="panel" hidden></div>
   <div id="labels"></div>
@@ -98,9 +98,11 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <div id="titleBtns">
       <button id="bPlay" class="btn main" type="button">Play</button>
       <button id="bNew" class="btn" type="button" hidden>New Game</button>
+      <button id="bQuick" class="btn" type="button">Quick Game</button>
+      <button id="bQuickNew" class="btn" type="button" hidden>New Quick Game</button>
       <button id="bSet" class="btn" type="button">Settings</button>
     </div>
-    <div id="how">Steer with the mouse, WASD or the arrow keys, or touch and drag. Press M to turn mouse steering off. Eat anything smaller than your hole.</div>
+    <div id="how">Steer with the mouse, WASD or the arrow keys, or touch and drag. Press M to turn mouse steering off. Eat anything smaller than your hole.<br>Quick Game: everything is one size everywhere and you grow extremely fast, with no level cap.</div>
   </div>
 </div>
 

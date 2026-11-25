@@ -419,7 +419,7 @@ function wander(dt, now) {
 const BOTS = [], MAXBOTS = MAXH - 1, BOT_XP = 0.2, RESPAWN = 25, BOT_SPEED = 0.6, BOT_CAP = 3;   // bots earn less xp a thing than you, and stop growing at BOT_CAP times the size their place suits
 let ACTIVE = [], boardT = 0, dyingBots = [];
 function botSetXp(b, xp) {                                        // a bot's level goes with its size, and stops at its cap: 1.4 times what the place suits near the start, BOT_CAP times further out
-  const d = Math.hypot(b.spec.x, b.spec.z), cap = Math.max(W.R0 * W.scaleAt(d) * (d < 150 ? 1.4 : BOT_CAP), b.spec.r);
+  const d = Math.hypot(b.spec.x, b.spec.z), cap = Math.max(W.R0 * W.botScale(d) * (d < 150 ? 1.4 : BOT_CAP), b.spec.r);
   b.xp = Math.min(xp, W.MAXXP, W.xpForRadius(cap)); const p = W.progress(b.xp); b.level = p.level; b.frac = p.frac; b.rt = W.radiusAt(p.level, p.frac);
 }
 function botGain(b, xp) { b.eaten++; botSetXp(b, b.xp + xp); }
@@ -662,15 +662,16 @@ function updateCamera(dt, snap) {
 
 // ------------------------------------------------------------------ screens
 let state = 'title';                                              // title, play or pause
-const SAVE_KEY = 'retroHole.save';
-function readSave() {
+let MODE = 'normal';                                              // the game being played: 'normal' (the endless map) or 'quick' (one fixed scale, no level cap, extremely fast growth)
+const SAVE_KEYS = { normal: 'retroHole.save', quick: 'retroHole.saveQuick' };
+function readSave(mode = MODE) {
   try {
-    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    const s = JSON.parse(localStorage.getItem(SAVE_KEYS[mode]) || 'null');
     if (s && s.v === 1 && isFinite(s.x) && isFinite(s.z) && s.xp >= 0) return s;
   } catch (e) {}
   return null;
 }
-function save() { if (state === 'title') return; try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten })); } catch (e) {} }
+function save() { if (state === 'title') return; try { localStorage.setItem(SAVE_KEYS[MODE], JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten })); } catch (e) {} }
 const hintsSeen = {};
 function hint(id, text, secs = 7) {
   if (hintsSeen[id]) return; hintsSeen[id] = 1;
@@ -689,19 +690,21 @@ function progressHints() {
   if (state !== 'play') return;
   if (ACTIVE.length) hint('bots', 'Other holes are competing with you. A bigger hole can swallow you, and you can swallow a smaller one: red names are bigger, green are smaller.', 9);
   if (H.eaten === 1) hint('first', 'Nicely done. Everything smaller than your hole falls in. Each thing eaten makes you bigger.');
-  if (H.level >= 4) hint('far', 'Walking away from the start finds bigger things to eat. Things get bigger the further out you go.');
+  if (H.level >= 4) hint('far', MODE === 'quick' ? 'Everything is the same size everywhere. The biggest things (towers, dinosaurs, giants) are further from the start.' : 'Walking away from the start finds bigger things to eat. Things get bigger the further out you go.');
   if (H.level >= 12) hint('area', 'Villages, forests and cities each have their own things. Big things that block your view fade out while you are under them.');
 }
-function startGame(fresh) {
+function startGame(fresh, mode = 'normal') {
   ensureAudio();
   clearWorld();
-  const s = fresh ? null : readSave();
+  W.setMode(mode); MODE = mode;                                   // the mode is set before any cell is made
+  const s = fresh ? null : readSave(mode);
   Object.assign(H, { x: s ? s.x : 0, z: s ? s.z : 0, vx: 0, vz: 0, eaten: s ? s.eaten | 0 : 0 });
   setXp(s ? s.xp : 0); H.r = H.rt;
   state = 'play'; lastHud = ''; IN.mouse = false; H.prot = 8; ACTIVE = []; dyingBots = [];   // a few seconds before bots can swallow you                // the pointer is ignored until it moves, so the click on Play does not steer
   $('#title').hidden = true; $('#pause').hidden = true; $('#hud').hidden = false; $('#ver').hidden = true;
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
-  if (fresh) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+  if (fresh) { try { localStorage.removeItem(SAVE_KEYS[mode]); } catch (e) {} }
+  $('#wMode').hidden = mode !== 'quick';
   hint('steer', 'Steer with the mouse, WASD or the arrow keys, or touch and drag. Eat things smaller than your hole.', 9);
   progressHints();
   save();
@@ -711,11 +714,15 @@ function showTitle() {
   save();
   state = 'title';
   clearWorld();
+  W.setMode('quick'); const q = readSave('quick'), ql = q ? W.progress(q.xp).level : 0;     // the title shows each game's level
+  W.setMode('normal'); MODE = 'normal';                            // and its own world is the normal one
   Object.assign(H, { x: 0, z: 0, vx: 0, vz: 0, eaten: 0 }); setXp(0); H.r = H.rt; auto = { ang: 0.6 };
   $('#hud').hidden = true; $('#pause').hidden = true; $('#title').hidden = false; $('#ver').hidden = false;
   const s = readSave();
   $('#bPlay').textContent = s ? 'Continue (Level ' + W.progress(s.xp).level + ')' : 'Play';
   $('#bNew').hidden = !s;
+  $('#bQuick').textContent = q ? 'Continue Quick (Level ' + ql.toLocaleString('en-GB') + ')' : 'Quick Game';
+  $('#bQuickNew').hidden = !q;
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
 }
 function openPause() { if (state !== 'play') return; state = 'pause'; save(); $('#pause').hidden = false; IN.touch = null; $('#stick').hidden = true; }
@@ -748,6 +755,8 @@ function renderSettings() {
 }
 $('#bPlay').onclick = () => startGame(false);
 $('#bNew').onclick = () => startGame(true);
+$('#bQuick').onclick = () => startGame(false, 'quick');
+$('#bQuickNew').onclick = () => startGame(true, 'quick');
 $('#bSet').onclick = openSettings; $('#bSet2').onclick = openSettings; $('#bSetClose').onclick = closeSettings;
 $('#bMenu').onclick = openPause; $('#bResume').onclick = closePause;
 $('#bQuit').onclick = showTitle; $('#bHome').onclick = returnToStart;
@@ -782,7 +791,7 @@ function frame(now) {
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
     H.prot = Math.max(0, H.prot - dt);
-    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play') lostCheck(dt);
+    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play' && MODE !== 'quick') lostCheck(dt);
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
@@ -802,7 +811,7 @@ window.__rh = {
   wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; }, BOTS, get active() { return ACTIVE; }, get dying() { return dyingBots; }, VIS, UN,
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
-  start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
+  get mode() { return MODE; }, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
   teleport(x, z) { H.x = x; H.z = z; H.vx = H.vz = 0; plan(); makeCells(1000); },
   setXp(xp) { setXp(xp); H.r = H.rt; },
   nearestEdible(re) {                                              // the nearest thing the hole can eat (only types matching re, if given)

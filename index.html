@@ -55,7 +55,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 #titleBox{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
 #brand{margin:0;font-family:'Press Start 2P',monospace;font-weight:400;font-size:clamp(24px,6vw,48px);line-height:1;color:var(--lamp);text-shadow:3px 3px 0 var(--rose),6px 6px 0 var(--ink)}
 #tag{font-size:24px;max-width:30ch}
-#titleBtns{display:flex;flex-direction:column;gap:10px;min-width:260px}
+#titleBtns{display:grid;grid-template-columns:1fr;gap:10px;min-width:260px}
 #how{font-size:20px;opacity:.85;max-width:44ch}
 #ver{position:fixed;left:0;right:0;bottom:6px;text-align:center;font-size:17px;opacity:.55}
 #pause{background:rgba(13,10,28,.55)}
@@ -68,7 +68,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
 .seg .btn{font-size:9px;padding:7px 9px}
 .note{font-size:18px;opacity:.75}
 @media (max-width:560px){.row{grid-template-columns:1fr}}
-@media (max-height:420px){#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
+@media (max-height:420px){#titleBtns{grid-template-columns:1fr 1fr;min-width:0}#how{display:none}#hint{display:none}#brand{font-size:24px}#titleBox{gap:8px}#tag{font-size:19px;max-width:none}.ovPanel{gap:6px}.btn.main{padding:8px 14px}}
 </style>
 </head>
 <body>
@@ -82,7 +82,7 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
   </div>
   <div id="top">
     <button id="bMenu" class="btn" type="button">Menu</button>
-    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span></div>
+    <div id="where" class="panel"><b id="wArea">Village</b><br><span id="wDist">0 m from start</span><span id="wMode" hidden><br>Quick Mode</span></div>
   </div>
   <div id="board" class="panel" hidden></div>
   <div id="labels"></div>
@@ -98,9 +98,11 @@ button:focus-visible{outline:3px dashed var(--chalk);outline-offset:2px}
     <div id="titleBtns">
       <button id="bPlay" class="btn main" type="button">Play</button>
       <button id="bNew" class="btn" type="button" hidden>New Game</button>
+      <button id="bQuick" class="btn" type="button">Quick Game</button>
+      <button id="bQuickNew" class="btn" type="button" hidden>New Quick Game</button>
       <button id="bSet" class="btn" type="button">Settings</button>
     </div>
-    <div id="how">Steer with the mouse, WASD or the arrow keys, or touch and drag. Press M to turn mouse steering off. Eat anything smaller than your hole.</div>
+    <div id="how">Steer with the mouse, WASD or the arrow keys, or touch and drag. Press M to turn mouse steering off. Eat anything smaller than your hole.<br>Quick Game: everything is one size everywhere and you grow extremely fast, with no level cap.</div>
   </div>
 </div>
 
@@ -152,10 +154,20 @@ const C0 = 32;                     // a map cell is this wide (m) in the first r
 const EAT_MAX = 0.92;              // a hole swallows things up to this fraction of its own radius
 const SPAWN_CLEAR = 3;             // nothing stands this close to the start (m)
 
-const scaleAt = d => 1 + d / D0;
-const tierOf = d => Math.floor(Math.log2(scaleAt(d)));              // ring 0 is 0 to 120 m, ring 1 is 120 to 360 m ...
-const tierRange = t => [D0 * (Math.pow(2, t) - 1), D0 * (Math.pow(2, t + 1) - 1)];
-const cellSize = t => C0 * Math.pow(2, t);
+// Two ways to play. 'normal' is the endless map above, where everything grows with the distance. 'quick' has one fixed
+// scale everywhere: things, cells and areas are the same size however far out, there is only ring 0, the areas are
+// regions of one fixed size, and levels have no cap and need very little xp, so the hole grows extremely fast to about the
+// size of the biggest buildings and then more and more slowly. Bots and the rarer kinds of thing still get tougher with
+// distance. setMode() switches (and forgets the cached cells); the game picks the mode before it makes any cell.
+let MODE = 'normal';
+const QUICK = { A: 0.8, P: 0.6, NEED: 0.12, NEED_K: 0.12 / 60, SPACING: 360, JITTER: 0.4, BOT_REACH: 1500, BOT_X: 14 };
+const quick = () => MODE === 'quick';
+const scaleAt = d => quick() ? 1 : 1 + d / D0;
+const tierOf = d => quick() ? 0 : Math.floor(Math.log2(1 + d / D0));   // ring 0 is 0 to 120 m, ring 1 is 120 to 360 m ...
+const tierRange = t => quick() ? [0, Infinity] : [D0 * (Math.pow(2, t) - 1), D0 * (Math.pow(2, t + 1) - 1)];
+const cellSize = t => quick() ? C0 : C0 * Math.pow(2, t);
+const setMode = m => { MODE = m === 'quick' ? 'quick' : 'normal'; INFO.clear(); };
+const getMode = () => MODE;
 
 let SEED = 20261124;
 const setSeed = s => { SEED = s | 0; INFO.clear(); };
@@ -175,20 +187,27 @@ const rng = seed => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>
 // 10, 1.3% by level 100, half a per cent at the cap), so the first minutes show a hole visibly getting bigger. The xp a
 // thing gives is its size next to the hole's, squared, plus a small flat part, so small things still count at the start
 // and a thing nearly your size is worth a lot.
-const need = L => 0.27 * Math.pow(1 + L / 25, 1.1);               // xp to get from level L to L + 1
-const CUM = new Float64Array(MAXLV + 2);                          // CUM[L] = xp at which level L begins
-for (let L = 1; L <= MAXLV; L++) CUM[L + 1] = CUM[L] + need(L);
+const qC = x => QUICK.NEED * x + QUICK.NEED_K * x * x / 2;       // quick mode: the xp at x levels in (x = level - 1 + how far through it), and its inverse
+const qX = xp => (Math.sqrt(QUICK.NEED * QUICK.NEED + 2 * QUICK.NEED_K * xp) - QUICK.NEED) / QUICK.NEED_K;
+const need = L => quick() ? QUICK.NEED + QUICK.NEED_K * (L - 0.5) : 0.27 * Math.pow(1 + L / 25, 1.1);   // xp to get from level L to L + 1
+const CUM = new Float64Array(MAXLV + 2);                          // CUM[L] = xp at which level L begins (normal mode)
+for (let L = 1; L <= MAXLV; L++) CUM[L + 1] = CUM[L] + (0.27 * Math.pow(1 + L / 25, 1.1));
 const MAXXP = CUM[MAXLV];
+const cum = L => quick() ? qC(L - 1) : CUM[L];                    // the xp at which level L begins, in either mode
+const maxLv = () => quick() ? Infinity : MAXLV, maxXp = () => quick() ? Infinity : MAXXP;
 function progress(xp) {                                           // { level, frac }: frac is how far through the level
+  if (quick()) { const x = qX(Math.max(0, xp)), L = Math.floor(x); return { level: L + 1, frac: x - L }; }
   if (xp >= MAXXP) return { level: MAXLV, frac: 0 };
   let lo = 1, hi = MAXLV;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (CUM[mid] <= xp) lo = mid; else hi = mid - 1; }
   return { level: lo, frac: (xp - CUM[lo]) / need(lo) };
 }
-const radiusAt = (level, frac = 0) => R0 * Math.pow(REACH, Math.pow(Math.min(level - 1 + frac, MAXLV - 1) / (MAXLV - 1), CURVE));
+const radiusAt = (level, frac = 0) => quick() ? R0 * Math.pow(1 + QUICK.A * (level - 1 + frac), QUICK.P)
+  : R0 * Math.pow(REACH, Math.pow(Math.min(level - 1 + frac, MAXLV - 1) / (MAXLV - 1), CURVE));
 // the xp at which a hole has a given radius: the inverse of radiusAt, so a bot made at a size has a level
 function xpForRadius(r) {
   if (r <= R0) return 0;
+  if (quick()) return qC((Math.pow(r / R0, 1 / QUICK.P) - 1) / QUICK.A);
   const x = Math.pow(Math.log(r / R0) / Math.log(REACH), 1 / CURVE) * (MAXLV - 1), L = Math.floor(x) + 1;
   return L >= MAXLV ? MAXXP : CUM[L] + (x - Math.floor(x)) * need(L);
 }
@@ -458,7 +477,19 @@ function polar(x, z) {                                            // where a poi
 // stops the regions near the start shrinking to nothing). A cell takes the area at its middle. The centres in the
 // first ring row are all villages, so the start is one big village.
 const REGION = { K: 5, R: 1.06, FLOOR: 150, JITTER: 0.4 };
+const pickBiome = h => h < 0.15 ? 'city' : h < 0.32 ? 'forest' : h < 0.44 ? 'jurassic' : h < 0.57 ? 'desert' : h < 0.69 ? 'arctic' : h < 0.78 ? 'volcano' : 'village';
+function quickBiome(x, z) {                                       // quick mode: a jittered square grid of region centres, 480 m apart; the four round the start are villages
+  const Q = QUICK, u = x / Q.SPACING, v = z / Q.SPACING, iu = Math.floor(u), iv = Math.floor(v);
+  let best = Infinity, bi = 0, bj = 0;
+  for (let a = iu - 1; a <= iu + 1; a++) for (let b = iv - 1; b <= iv + 1; b++) {
+    const su = a + 0.5 + (hash(SEED, a, b, 41) / TWO32 - 0.5) * Q.JITTER, sv = b + 0.5 + (hash(SEED, a, b, 42) / TWO32 - 0.5) * Q.JITTER, dd = (u - su) * (u - su) + (v - sv) * (v - sv);
+    if (dd < best) { best = dd; bi = a; bj = b; }
+  }
+  if ((bi === 0 || bi === -1) && (bj === 0 || bj === -1)) return 'village';
+  return pickBiome(hash(SEED, bi, bj, 43) / TWO32);
+}
 function rawBiome(x, z) {
+  if (quick()) return quickBiome(x, z);
   const d = Math.hypot(x, z), K = REGION.K, u = (Math.atan2(z, x) / (2 * Math.PI) + 0.5) * K, v = Math.log((d + REGION.FLOOR) / REGION.FLOOR) * REGION.R;
   const iu = Math.floor(u), iv = Math.floor(v);
   let best = Infinity, bk = 0, bj = 0;
@@ -470,7 +501,7 @@ function rawBiome(x, z) {
   }
   if (bj === 0) return 'village';                                 // every centre in the first ring row is a village, so the start is one big village with natural edges
   const h = hash(SEED, bk, bj, 33) / TWO32;
-  return h < 0.15 ? 'city' : h < 0.32 ? 'forest' : h < 0.44 ? 'jurassic' : h < 0.57 ? 'desert' : h < 0.69 ? 'arctic' : h < 0.78 ? 'volcano' : 'village';
+  return pickBiome(h);
 }
 // the road on one cell edge: its style, or null. axis 0: the line x = k * C, between cells (k - 1, m) and (k, m);
 // axis 1: the line z = k * C, between (m, k - 1) and (m, k). A line is a road along its whole length when its hash is
@@ -1081,6 +1112,7 @@ const BOT_NAMES = ['Gulp', 'Maw', 'Voidy', 'Pit', 'Abyss', 'Chomp', 'Sinkhole', 
 const BOT_COLOURS = ['#ff6f8f', '#6cb8ff', '#7dffb0', '#c08aff', '#ff9a4a', '#4de0e0', '#f2f26a', '#ffffff'];
 const BOT_CHANCE = 0.2;                                           // the share of cells with a bot
 const START_BOTS = { '0:0': [0.8, 14, 12], '-1:-1': [0.6, -17, -15] };   // factor, x, z
+const botScale = d => quick() ? 1 + (QUICK.BOT_X - 1) * Math.min(1, d / QUICK.BOT_REACH) : scaleAt(d);   // what a bot's size is measured against: the local scale, or in quick mode a size that grows to 14 times by 1.5 km
 function botSpec(c) {
   const rnd = rng(hash(SEED, c.t, c.i, c.j, 555)), fixed = c.t === 0 ? START_BOTS[c.i + ':' + c.j] : undefined;
   const roll = rnd(), px = rnd(), pz = rnd(), pm = rnd(), pn = rnd(), pc = rnd(), pa = rnd();
@@ -1088,7 +1120,7 @@ function botSpec(c) {
   const x = fixed ? fixed[1] : c.inner.x0 + px * (c.inner.x1 - c.inner.x0), z = fixed ? fixed[2] : c.inner.z0 + pz * (c.inner.z1 - c.inner.z0), d = Math.hypot(x, z);
   if (tierOf(d) !== c.t || (!fixed && d < 40) || (c.pond && Math.hypot(x - c.pond.x, z - c.pond.z) < c.pond.r * 1.2)) return null;
   const m = fixed ? fixed[0] : d < 150 ? 0.5 + 0.7 * pm : 0.5 * Math.pow(5.2, pm);   // near the start no bot is much bigger than a new hole
-  return { id: c.key, x, z, r: R0 * scaleAt(d) * m, name: BOT_NAMES[Math.floor(pn * BOT_NAMES.length)], colour: BOT_COLOURS[Math.floor(pc * BOT_COLOURS.length)], aggr: 0.4 + 0.6 * pa };
+  return { id: c.key, x, z, r: R0 * botScale(d) * m, name: BOT_NAMES[Math.floor(pn * BOT_NAMES.length)], colour: BOT_COLOURS[Math.floor(pc * BOT_COLOURS.length)], aggr: 0.4 + 0.6 * pa };
 }
 
 // ------------------------------------------------------------------ making a cell
@@ -1111,15 +1143,19 @@ function wantedCells(px, pz, R, cull = 0, maxCells = 1200) {
   const dp = Math.hypot(px, pz), out = [];
   const t0 = tierOf(Math.max(0, dp - R)), t1 = tierOf(dp + R);
   for (let t = t0; t <= t1; t++) {
-    if (BIGGEST * Math.pow(2, t + 1) * 1.2 < cull) continue;
+    if (BIGGEST * (quick() ? 1.3 : Math.pow(2, t + 1)) * 1.2 < cull) continue;
     const C = cellSize(t), [dA, dB] = tierRange(t);
-    const i0 = Math.floor((px - R) / C), i1 = Math.floor((px + R) / C), j0 = Math.floor((pz - R) / C), j1 = Math.floor((pz + R) / C);
-    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 6000) continue;           // far too many small cells: a hole this much bigger than the ring sees only dust there
+    let RT = R, i0 = Math.floor((px - RT) / C), i1 = Math.floor((px + RT) / C), j0 = Math.floor((pz - RT) / C), j1 = Math.floor((pz + RT) / C);
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) > 6000) {                   // far too many small cells: a hole this much bigger than the ring sees only dust there
+      if (!quick()) continue;                                     // (in the normal map that ring is left out)
+      RT = Math.sqrt(6000) * C / 2 * 0.95;                        // (in quick mode, where the cells are all one size, only the nearest 6,000 are wanted)
+      i0 = Math.floor((px - RT) / C); i1 = Math.floor((px + RT) / C); j0 = Math.floor((pz - RT) / C); j1 = Math.floor((pz + RT) / C);
+    }
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
       const xa = i * C, xb = xa + C, za = j * C, zb = za + C;
       const nx = Math.min(Math.max(px, xa), xb), nz = Math.min(Math.max(pz, za), zb);
       const dist = Math.hypot(nx - px, nz - pz);
-      if (dist > R) continue;
+      if (dist > RT) continue;
       const near = Math.hypot(distToZero(xa, xb), distToZero(za, zb));
       const far = Math.hypot(Math.max(Math.abs(xa), Math.abs(xb)), Math.max(Math.abs(za), Math.abs(zb)));
       if (far < dA || near >= dB) continue;
@@ -1140,7 +1176,8 @@ function fmtLen(m) {                                              // a length fo
 }
 
 return {
-  D0, R0, MAXLV, REACH, CURVE, C0, EAT_MAX, SPAWN_CLEAR, MAXXP, CUM,
+  D0, R0, REACH, CURVE, C0, EAT_MAX, SPAWN_CLEAR, CUM, cum, QUICK, botScale, setMode, getMode,
+  get MAXLV() { return maxLv(); }, get MAXXP() { return maxXp(); },
   scaleAt, tierOf, tierRange, cellSize, setSeed, getSeed, hash, rng,
   need, progress, radiusAt, xpFor, xpForRadius, canEat, swallowDist, BOT_NAMES, BOT_COLOURS, botSpec,
   BIOMES, STYLES, FACE, LANE, yawOf, biomeAt, cellInfo, cellAt, groundColour, polar, LAYOUTS,
@@ -1157,7 +1194,7 @@ const W = WORLD;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
-const BUILD = '64cdb4be';   // version: tools/build.js fills in a fingerprint of the game code
+const BUILD = '19690998';   // version: tools/build.js fills in a fingerprint of the game code
 const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ------------------------------------------------------------------ settings
@@ -1570,7 +1607,7 @@ function wander(dt, now) {
 const BOTS = [], MAXBOTS = MAXH - 1, BOT_XP = 0.2, RESPAWN = 25, BOT_SPEED = 0.6, BOT_CAP = 3;   // bots earn less xp a thing than you, and stop growing at BOT_CAP times the size their place suits
 let ACTIVE = [], boardT = 0, dyingBots = [];
 function botSetXp(b, xp) {                                        // a bot's level goes with its size, and stops at its cap: 1.4 times what the place suits near the start, BOT_CAP times further out
-  const d = Math.hypot(b.spec.x, b.spec.z), cap = Math.max(W.R0 * W.scaleAt(d) * (d < 150 ? 1.4 : BOT_CAP), b.spec.r);
+  const d = Math.hypot(b.spec.x, b.spec.z), cap = Math.max(W.R0 * W.botScale(d) * (d < 150 ? 1.4 : BOT_CAP), b.spec.r);
   b.xp = Math.min(xp, W.MAXXP, W.xpForRadius(cap)); const p = W.progress(b.xp); b.level = p.level; b.frac = p.frac; b.rt = W.radiusAt(p.level, p.frac);
 }
 function botGain(b, xp) { b.eaten++; botSetXp(b, b.xp + xp); }
@@ -1813,15 +1850,16 @@ function updateCamera(dt, snap) {
 
 // ------------------------------------------------------------------ screens
 let state = 'title';                                              // title, play or pause
-const SAVE_KEY = 'retroHole.save';
-function readSave() {
+let MODE = 'normal';                                              // the game being played: 'normal' (the endless map) or 'quick' (one fixed scale, no level cap, extremely fast growth)
+const SAVE_KEYS = { normal: 'retroHole.save', quick: 'retroHole.saveQuick' };
+function readSave(mode = MODE) {
   try {
-    const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+    const s = JSON.parse(localStorage.getItem(SAVE_KEYS[mode]) || 'null');
     if (s && s.v === 1 && isFinite(s.x) && isFinite(s.z) && s.xp >= 0) return s;
   } catch (e) {}
   return null;
 }
-function save() { if (state === 'title') return; try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten })); } catch (e) {} }
+function save() { if (state === 'title') return; try { localStorage.setItem(SAVE_KEYS[MODE], JSON.stringify({ v: 1, x: H.x, z: H.z, xp: H.xp, eaten: H.eaten })); } catch (e) {} }
 const hintsSeen = {};
 function hint(id, text, secs = 7) {
   if (hintsSeen[id]) return; hintsSeen[id] = 1;
@@ -1840,19 +1878,21 @@ function progressHints() {
   if (state !== 'play') return;
   if (ACTIVE.length) hint('bots', 'Other holes are competing with you. A bigger hole can swallow you, and you can swallow a smaller one: red names are bigger, green are smaller.', 9);
   if (H.eaten === 1) hint('first', 'Nicely done. Everything smaller than your hole falls in. Each thing eaten makes you bigger.');
-  if (H.level >= 4) hint('far', 'Walking away from the start finds bigger things to eat. Things get bigger the further out you go.');
+  if (H.level >= 4) hint('far', MODE === 'quick' ? 'Everything is the same size everywhere. The biggest things (towers, dinosaurs, giants) are further from the start.' : 'Walking away from the start finds bigger things to eat. Things get bigger the further out you go.');
   if (H.level >= 12) hint('area', 'Villages, forests and cities each have their own things. Big things that block your view fade out while you are under them.');
 }
-function startGame(fresh) {
+function startGame(fresh, mode = 'normal') {
   ensureAudio();
   clearWorld();
-  const s = fresh ? null : readSave();
+  W.setMode(mode); MODE = mode;                                   // the mode is set before any cell is made
+  const s = fresh ? null : readSave(mode);
   Object.assign(H, { x: s ? s.x : 0, z: s ? s.z : 0, vx: 0, vz: 0, eaten: s ? s.eaten | 0 : 0 });
   setXp(s ? s.xp : 0); H.r = H.rt;
   state = 'play'; lastHud = ''; IN.mouse = false; H.prot = 8; ACTIVE = []; dyingBots = [];   // a few seconds before bots can swallow you                // the pointer is ignored until it moves, so the click on Play does not steer
   $('#title').hidden = true; $('#pause').hidden = true; $('#hud').hidden = false; $('#ver').hidden = true;
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
-  if (fresh) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
+  if (fresh) { try { localStorage.removeItem(SAVE_KEYS[mode]); } catch (e) {} }
+  $('#wMode').hidden = mode !== 'quick';
   hint('steer', 'Steer with the mouse, WASD or the arrow keys, or touch and drag. Eat things smaller than your hole.', 9);
   progressHints();
   save();
@@ -1862,11 +1902,15 @@ function showTitle() {
   save();
   state = 'title';
   clearWorld();
+  W.setMode('quick'); const q = readSave('quick'), ql = q ? W.progress(q.xp).level : 0;     // the title shows each game's level
+  W.setMode('normal'); MODE = 'normal';                            // and its own world is the normal one
   Object.assign(H, { x: 0, z: 0, vx: 0, vz: 0, eaten: 0 }); setXp(0); H.r = H.rt; auto = { ang: 0.6 };
   $('#hud').hidden = true; $('#pause').hidden = true; $('#title').hidden = false; $('#ver').hidden = false;
   const s = readSave();
   $('#bPlay').textContent = s ? 'Continue (Level ' + W.progress(s.xp).level + ')' : 'Play';
   $('#bNew').hidden = !s;
+  $('#bQuick').textContent = q ? 'Continue Quick (Level ' + ql.toLocaleString('en-GB') + ')' : 'Quick Game';
+  $('#bQuickNew').hidden = !q;
   plan(); makeCells(400); updateGround(); updateCamera(0, true);
 }
 function openPause() { if (state !== 'play') return; state = 'pause'; save(); $('#pause').hidden = false; IN.touch = null; $('#stick').hidden = true; }
@@ -1899,6 +1943,8 @@ function renderSettings() {
 }
 $('#bPlay').onclick = () => startGame(false);
 $('#bNew').onclick = () => startGame(true);
+$('#bQuick').onclick = () => startGame(false, 'quick');
+$('#bQuickNew').onclick = () => startGame(true, 'quick');
 $('#bSet').onclick = openSettings; $('#bSet2').onclick = openSettings; $('#bSetClose').onclick = closeSettings;
 $('#bMenu').onclick = openPause; $('#bResume').onclick = closePause;
 $('#bQuit').onclick = showTitle; $('#bHome').onclick = returnToStart;
@@ -1933,7 +1979,7 @@ function frame(now) {
     planTimer -= dt;
     if (planTimer <= 0 || queue.length) { if (planTimer <= 0) { plan(); planTimer = 0.25; } makeCells(5); }
     H.prot = Math.max(0, H.prot - dt);
-    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play') lostCheck(dt);
+    wander(dt, now); if (state === 'play') botsStep(dt); eatStep(); fallStep(dt); fadeStep(dt); if (state === 'play' && MODE !== 'quick') lostCheck(dt);
     saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
   updateGround(); updateCamera(dt, false);
@@ -1953,7 +1999,7 @@ window.__rh = {
   wanderOnce(dt) { wander(dt, performance.now()); }, get fading() { return FADING.size; }, BOTS, get active() { return ACTIVE; }, get dying() { return dyingBots; }, VIS, UN,
   get state() { return state; }, H, S, CELLS, FALL, get frames() { return frames; }, get drawn() { return drawn; }, get objects() { return objTotal; },
   get queue() { return queue.length; }, get tile() { return { size: tileSize, n: tileN }; }, W, BUILD,
-  start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
+  get mode() { return MODE; }, start: startGame, title: showTitle, pause: openPause, resume: closePause, home: returnToStart, speedRef,
   teleport(x, z) { H.x = x; H.z = z; H.vx = H.vz = 0; plan(); makeCells(1000); },
   setXp(xp) { setXp(xp); H.r = H.rt; },
   nearestEdible(re) {                                              // the nearest thing the hole can eat (only types matching re, if given)
