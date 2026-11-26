@@ -27,10 +27,12 @@ Good to know:
 - **Impeccable's engine.** Some Impeccable commands (detect, live, and the like) use a program that its launcher,
   `impeccable/scripts/impeccable`, downloads the first time it is needed and checks against
   `scripts/engine-checksums.txt`. Its advice and reviews work without it. A cloud session may not be allowed to download it.
-- **Impeccable and the internet.** When starting a new design it fetches visual directions from impeccable.style and,
-  unless turned off, records anonymously which were shown and picked (its README: "Your project name, files, code, and
-  PRODUCT.md are never sent"). To stop the record: `"telemetry": false` in `.impeccable/config.json`. Impeccable writes
-  its notes to `PRODUCT.md`, `DESIGN.md` and `.impeccable/` in the project root if it is run.
+- **Impeccable and the internet.** When starting a new design it fetches visual directions from impeccable.style. It can
+  also record anonymously which directions were shown and which was picked (its README: "Your project name, files, code,
+  and PRODUCT.md are never sent"). **That record is switched off for this project** by `.impeccable/config.json`
+  (`"telemetry": false`, the setting its README gives for "the whole project"; checked against the upstream README on
+  26 November 2026). Turning it off does not stop the request for directions. Impeccable writes its notes to
+  `PRODUCT.md`, `DESIGN.md` and `.impeccable/` in the project root if it is run.
 - **UI/UX Pro Max** runs `python .claude/skills/ui-ux-pro-max/scripts/search.py` over its local data (no internet). Checked
   on 26 November 2026: the script only reads its own data files.
 - **Unslop**'s optional scripts (`scripts/*.mjs`) need Node.
