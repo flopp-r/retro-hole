@@ -30,6 +30,7 @@ This is the main guide for anyone, person or AI, who changes this project. Claud
 - Code style: match the file you're in. Compact, comments only where the reason isn't obvious. No build step beyond `tools/build.js`, and no frameworks or npm packages in the game.
 - Browser storage keys start with `retroHole.`: `retroHole.settings`, `retroHole.save`, `retroHole.saveQuick` (Quick Game), `retroHole.savePeaceful`, `retroHole.saveArea.<area>` (one for each area), `retroHole.profile` (coins, skins, kills, deaths and best results), and for admin mode `retroHole.admin`, `retroHole.profileAdmin`, `retroHole.saveAdmin`, `retroHole.saveQuickAdmin` and the same `Admin` ending on every other save key. Wrap every access in try/catch.
 - Every screen must fit a phone held sideways (760 x 340) without overlap.
+- Design skills (Impeccable, UI/UX Pro Max, Unslop) are in `.claude/skills/` (see its README.md for sources and licences). They load in every session on this project, but the game's look is Retro Set's (palette, pixel fonts): use them to review and suggest, and ask the owner before restyling anything with them.
 
 ## Files
 
@@ -50,6 +51,7 @@ This is the main guide for anyone, person or AI, who changes this project. Claud
 | `tests/world.test.js` | Tests of the rules and the map, and of what coins pay. |
 | `tests/skins.test.js` | Tests of the skins, effects and the saved profile (and admin mode's test profile). |
 | `tests/browser/` | Browser tests in headless Chromium: `run-all.js`, `lib.js`, `game.test.js`, `bots.test.js`, `biomes.test.js`, `scale.test.js`, `sound.test.js`, `quick.test.js`, `skins.test.js`, `admin.test.js`, `modes.test.js`. |
+| `.claude/skills/` | The owner's design skills (Impeccable, UI/UX Pro Max, Unslop) with their licences, and a README on where they came from. Not part of the game. |
 | `.nojekyll` | Stops GitHub Pages running Jekyll over the repository. |
 
 ## Commands
